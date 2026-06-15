@@ -2,6 +2,13 @@
 include "config.php";
 
 $kategorija = $_GET['kategorija'] ?? 'JA';
+$today = date('Y-m-d');
+
+$sqlToday = "SELECT * FROM tasks 
+WHERE datum = '$today'
+ORDER BY vreme ASC";
+
+$resultToday = $conn->query($sqlToday);
 
 $sql = "SELECT * FROM tasks 
         WHERE kategorija='$kategorija'
@@ -98,7 +105,31 @@ $result = $conn->query($sql);
 
         <h2>Dnevni raspored</h2>
 
-        <p>
+<?php
+
+if ($resultToday && $resultToday->num_rows > 0) {
+
+    while($row = $resultToday->fetch_assoc()) {
+
+        echo "
+        <div style='padding:10px; border-left:4px solid #333; margin-bottom:10px; background:#fff;'>
+
+            <b>{$row['vreme']}</b> - {$row['kategorija']}<br>
+            {$row['opis1']}<br>
+            Trajanje: {$row['trajanje']} min | Status: {$row['status']}
+
+        </div>
+        ";
+
+    }
+
+} else {
+
+    echo "Nema obaveza za danas.";
+
+}
+
+?>
             <?php
 
 if ($result->num_rows > 0) {
