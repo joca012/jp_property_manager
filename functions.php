@@ -14,9 +14,21 @@ function getStatusColor($status) {
             return "#dc3545"; // crveno
 
         case "todo":
-            return "#6c757d"; // sivo
+            return "#dc3545"; // crveno
 
         default:
             return "#6c757d";
     }
+}
+function autoUpdateStatus($conn) {
+
+    $now = date('Y-m-d H:i:s');
+
+    $sql = "UPDATE tasks 
+            SET status = 'propusteno'
+            WHERE status = 'zakazano'
+            AND CONCAT(datum, ' ', vreme) < '$now'
+            AND status != 'zavrseno'";
+
+    $conn->query($sql);
 }

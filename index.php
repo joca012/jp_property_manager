@@ -1,21 +1,35 @@
 <?php
 include "config.php";
 include "functions.php";
+autoUpdateStatus($conn);
 
-$kategorija = $_GET['kategorija'] ?? 'JA';
+/* =========================
+   FILTER (DEFAULT = SVE)
+========================= */
+$kategorija = $_GET['kategorija'] ?? 'SVE';
 $today = date('Y-m-d');
 
-/* DNEVNI RASPORED */
+/* =========================
+   DNEVNI RASPORED
+========================= */
 $sqlToday = "SELECT * FROM tasks 
 WHERE datum = '$today'
 ORDER BY vreme ASC";
-
 $resultToday = $conn->query($sqlToday);
 
-/* FILTER PO KATEGORIJI */
-$sql = "SELECT * FROM tasks 
-WHERE kategorija='$kategorija'
-ORDER BY datum, vreme";
+/* =========================
+   GLAVNI UPIT (FILTER)
+========================= */
+if ($kategorija == "SVE") {
+
+    $sql = "SELECT * FROM tasks ORDER BY datum, vreme";
+
+} else {
+
+    $sql = "SELECT * FROM tasks 
+            WHERE kategorija = '$kategorija'
+            ORDER BY datum, vreme";
+}
 
 $result = $conn->query($sql);
 ?>
@@ -38,6 +52,7 @@ body {
     padding: 15px;
     display: flex;
     gap: 10px;
+    align-items: center;
 }
 
 .header a {
@@ -96,21 +111,27 @@ body {
 
 <body>
 
+<!-- =========================
+     HEADER
+========================= -->
 <div class="header">
 
-<a href="?kategorija=JA">JA</a>
-<a href="?kategorija=EPS">EPS</a>
-<a href="?kategorija=PIDRA">PIDRA</a>
-<a href="?kategorija=PLAC">PLAC</a>
-<a href="?kategorija=SAFE_LIFE">SAFE LIFE</a>
+    <a href="index.php?kategorija=SVE">SVE</a>
+    <a href="?kategorija=JA">JA</a>
+    <a href="?kategorija=EPS">EPS</a>
+    <a href="?kategorija=PIDRA">PIDRA</a>
+    <a href="?kategorija=PLAC">PLAC</a>
+    <a href="?kategorija=SAFE_LIFE">SAFE LIFE</a>
 
-<a class="todo" href="todo.php">TODO</a>
+    <a class="todo" href="todo.php">TODO</a>
 
 </div>
 
 <div class="container">
 
-<!-- LEVA STRANA -->
+<!-- =========================
+     LEVA STRANA (DANAS)
+========================= -->
 <div class="left">
 
 <h2 style="display:flex; justify-content:space-between; align-items:center;">
@@ -127,16 +148,20 @@ if ($resultToday && $resultToday->num_rows > 0) {
 
         $datumFormat = date("d.m.Y.", strtotime($row['datum']));
         $vremeFormat = date("H:i", strtotime($row['vreme']));
-
         $statusColor = getStatusColor($row['status']);
 
         $dugme = "";
+
         if ($row['status'] != "zavrseno") {
-            $dugme = "<br><br><a href='zavrsi.php?id={$row['id']}'>✔ Završi</a>";
+            $dugme .= "<br><br><a href='zavrsi.php?id={$row['id']}'>✔ Završi</a>";
+        }
+
+        if ($row['status'] != "zavrseno" && $row['status'] != "todo") {
+            $dugme .= " | <a href='otkazi.php?id={$row['id']}'>✖ Otkaži</a>";
         }
 
         echo "
-        <div class='card' style='background:<?php echo $statusColor; ?>'>
+        <div class='card' style='border-left:6px solid $statusColor'>
 
             <b>$datumFormat $vremeFormat</b> - {$row['kategorija']}<br><br>
 
@@ -161,18 +186,27 @@ if ($resultToday && $resultToday->num_rows > 0) {
 
 </div>
 
-<!-- DESNA STRANA -->
+<!-- =========================
+     DESNA STRANA (FILTER)
+========================= -->
 <div class="right">
 
 <h2>Kategorija: <?php echo $kategorija; ?></h2>
 
 <?php
-if ($result->num_rows > 0) {
+if ($result && $result->num_rows > 0) {
 
     while($row = $result->fetch_assoc()) {
 
-        $datumFormat = date("d.m.Y.", strtotime($row['datum']));
-        $vremeFormat = date("H:i", strtotime($row['vreme']));
+        /* DATUM/VREME LOGIKA */
+        if ($row['status'] == "todo" || !$row['datum']) {
+            $datumFormat = "🔴 Datum: ⚠️";
+            $vremeFormat = "🔴 Vreme: ⚠️";
+        } else {
+            $datumFormat = date("d.m.Y.", strtotime($row['datum']));
+            $vremeFormat = date("H:i", strtotime($row['vreme']));
+        }
+
         $statusColor = getStatusColor($row['status']);
 
         echo "
@@ -186,6 +220,12 @@ if ($result->num_rows > 0) {
             <span class='badge' style='background:$statusColor'>
                 {$row['status']}
             </span>
+
+            ". (
+    ($row['status'] == "todo" || $row['status'] == "propusteno")
+    ? " <a href='todo.php?planiraj={$row['id']}' style='margin-left:10px;color:#333;'>✏ Planiraj</a>"
+    : ""
+) . "
 
         </div>
         ";

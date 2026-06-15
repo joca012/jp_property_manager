@@ -95,7 +95,24 @@ button {
 <body>
 
 
-<h2>Nova TODO obaveza</h2>
+<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+
+    <h2 style="margin:0;">Nova TODO obaveza</h2>
+
+    <a href="index.php" style="
+        background:#555;
+        color:#fff;
+        padding:10px 12px;
+        border-radius:5px;
+        text-decoration:none;
+    ">
+        ← Nazad
+    </a>
+
+</div>
+
+ 
+
 
 
 <form method="POST">
@@ -152,6 +169,7 @@ Dodaj u TODO
 </button>
 
 
+
 </form>
 
 
@@ -169,7 +187,7 @@ Dodaj u TODO
 
 $result = $conn->query(
 "SELECT * FROM tasks 
-WHERE status='todo'
+WHERE status='todo' OR status='propusteno'
 ORDER BY created_at DESC"
 );
 
