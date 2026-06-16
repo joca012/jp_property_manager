@@ -5,7 +5,7 @@ include "config.php";
    UZMI ID
 ========================= */
 $id = $_GET['id'] ?? $_POST['id'] ?? null;
-$from = $_GET['from'] ?? 'index';
+$from = $_GET['from'] ?? $_POST['from'] ?? 'index';
 
 if (!$id) {
     die("Greška: ID nije poslat");
@@ -14,9 +14,17 @@ if (!$id) {
 $id = (int)$id;
 
 /* =========================
-   UCITAJ TASK
+   UČITAJ TASK I ŠABLON
 ========================= */
-$result = $conn->query("SELECT * FROM tasks WHERE id=$id");
+$result = $conn->query("
+    SELECT 
+        tasks.*,
+        sabloni.tip AS sablon_tip,
+        sabloni.vreme AS sablon_vreme
+    FROM tasks
+    LEFT JOIN sabloni ON tasks.sablon_id = sabloni.id
+    WHERE tasks.id = $id
+");
 
 if (!$result || $result->num_rows == 0) {
     die("Greška: task ne postoji");
@@ -24,13 +32,20 @@ if (!$result || $result->num_rows == 0) {
 
 $task = $result->fetch_assoc();
 
+$isSmena = ($task['sablon_tip'] == 'smena');
+
 /* =========================
    PLANIRANJE
 ========================= */
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
     $datum = $_POST['datum'];
-    $vreme = $_POST['vreme'];
+
+    if ($isSmena && !empty($task['sablon_vreme'])) {
+        $vreme = $task['sablon_vreme'];
+    } else {
+        $vreme = $_POST['vreme'];
+    }
 
     /* ---- izračunaj novi interval ---- */
     $start = strtotime("$datum $vreme");
@@ -44,6 +59,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         WHERE datum = '$datum'
         AND status != 'todo'
         AND status != 'propusteno'
+        AND status != 'obrisano'
         AND id != $id
     ");
 
@@ -63,8 +79,29 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     }
 
     if (!$ok) {
-        die("❌ Greška: Termin se preklapa sa postojećom obavezom. Izaberi drugi termin.");
-    }
+    echo "
+    <div style='font-family:Arial;padding:20px;'>
+
+        <h3 style='color:#dc3545;'>❌ Termin se preklapa</h3>
+
+        <p>Izabrani termin se preklapa sa postojećom obavezom.</p>
+
+        <a href='planiraj.php?id=$id&from=$from'
+           style='
+            display:inline-block;
+            background:#555;
+            color:white;
+            padding:10px 15px;
+            border-radius:5px;
+            text-decoration:none;
+           '>
+            ← Nazad na planiranje
+        </a>
+
+    </div>
+    ";
+    exit;
+}
 
     /* =========================
        UPDATE
@@ -77,12 +114,12 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         WHERE id=$id
     ");
 
-   $redirect = ($from == 'todo') ? 'todo.php' : 'index.php';
+    $redirect = ($from == 'todo') ? 'todo.php' : 'index.php';
 
-echo "<script>
-window.parent.location.href = '$redirect';
-</script>";
-exit;
+    echo "<script>
+    window.parent.location.href = '$redirect';
+    </script>";
+    exit;
 }
 ?>
 
@@ -91,8 +128,12 @@ exit;
 <form method="POST">
 
     <input type="hidden" name="id" value="<?= $id ?>">
+    <input type="hidden" name="from" value="<?= $from ?>">
 
-    <p><?= $task['opis1']; ?></p>
+    <p>
+        <b><?= $task['opis1']; ?></b><br>
+        Trajanje: <?= $task['trajanje']; ?> min
+    </p>
 
     Datum:
     <input type="date" name="datum" required>
@@ -100,7 +141,23 @@ exit;
     <br><br>
 
     Vreme:
-    <input type="time" name="vreme" required>
+    <?php if ($isSmena && !empty($task['sablon_vreme'])) { ?>
+
+        <input 
+            type="time" 
+            name="vreme" 
+            value="<?= substr($task['sablon_vreme'], 0, 5) ?>" 
+            readonly
+        >
+
+        <br>
+        <small>Vreme je zaključano jer je obaveza kreirana iz šablona smene.</small>
+
+    <?php } else { ?>
+
+        <input type="time" name="vreme" required>
+
+    <?php } ?>
 
     <br><br>
 

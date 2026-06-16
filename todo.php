@@ -3,60 +3,41 @@
 include "config.php";
 
 /* =========================
-   PLANIRANJE (UPDATE TASKA)
+   UČITAJ ŠABLONE
 ========================= */
-if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['id']) && !empty($_POST['id'])) {
-
-    $id = $_POST['id'];
-    $datum = $_POST['datum'];
-    $vreme = $_POST['vreme'];
-
-    $sql = "UPDATE tasks 
-            SET datum='$datum', vreme='$vreme', status='zakazano'
-            WHERE id=$id";
-
-    $conn->query($sql);
-
-    header("Location: todo.php");
-    exit;
-}
+$sabloni = $conn->query("SELECT * FROM sabloni ORDER BY tip, naziv");
 
 /* =========================
-   DODAVANJE NOVOG TODO (INSERT)
+   DODAVANJE NOVOG TODO
 ========================= */
 if ($_SERVER["REQUEST_METHOD"] == "POST" && !isset($_POST['id'])) {
 
     $kategorija = $_POST['kategorija'];
     $opis1 = $_POST['opis1'];
     $opis2 = $_POST['opis2'];
-    $trajanje = $_POST['trajanje'];
+    $trajanje = (int)$_POST['trajanje'];
+    $sablon_id = !empty($_POST['sablon_id']) ? (int)$_POST['sablon_id'] : "NULL";
 
     $sql = "INSERT INTO tasks
-    (kategorija, opis1, opis2, trajanje, status)
-    VALUES
-    (
-    '$kategorija',
-    '$opis1',
-    '$opis2',
-    '$trajanje',
-    'todo'
-    )";
+            (kategorija, opis1, opis2, trajanje, status, sablon_id)
+            VALUES
+            (
+                '$kategorija',
+                '$opis1',
+                '$opis2',
+                $trajanje,
+                'todo',
+                $sablon_id
+            )";
 
     if ($conn->query($sql) === TRUE) {
-
-        echo "<p style='color:green'>
-        Obaveza dodata u TODO!
-        </p>";
-
+        echo "<p style='color:green'>Obaveza dodata u TODO!</p>";
     } else {
-
         echo "Greška: " . $conn->error;
-
     }
 }
 
 ?>
-
 
 <!DOCTYPE html>
 <html>
@@ -66,7 +47,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && !isset($_POST['id'])) {
 <meta charset="UTF-8">
 
 <title>TODO</title>
-
 
 <style>
 
@@ -96,7 +76,6 @@ button {
 </head>
 
 <body>
-
 
 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
 
@@ -128,18 +107,42 @@ button {
 
 </div>
 
-
 <!-- =========================
-     FORM (OSTAJE ISTO)
+     FORMA ZA NOVU TODO OBAVEZU
 ========================= -->
 <form method="POST">
 
-<select name="kategorija">
-<option value="JA">JA</option>
-<option value="EPS">EPS</option>
-<option value="PIDRA">PIDRA</option>
-<option value="PLAC">PLAC</option>
-<option value="SAFE_LIFE">SAFE LIFE</option>
+<label>Šablon</label><br>
+<select id="sablonSelect" name="sablon_id">
+    <option value="">-- bez šablona --</option>
+
+    <?php while ($s = $sabloni->fetch_assoc()) { ?>
+        <option
+            value="<?= $s['id'] ?>"
+            data-kategorija="<?= htmlspecialchars($s['kategorija']) ?>"
+            data-opis1="<?= htmlspecialchars($s['opis1']) ?>"
+            data-opis2="<?= htmlspecialchars($s['opis2']) ?>"
+            data-trajanje="<?= htmlspecialchars($s['trajanje']) ?>"
+            data-vreme="<?= htmlspecialchars($s['vreme']) ?>"
+            data-tip="<?= htmlspecialchars($s['tip']) ?>"
+        >
+            <?= htmlspecialchars($s['naziv']) ?> — <?= htmlspecialchars($s['tip']) ?>
+        </option>
+    <?php } ?>
+</select>
+
+<button type="button" onclick="primeniSablon()">
+    Primeni šablon
+</button>
+
+<br><br>
+
+<select name="kategorija" id="kategorijaInput" required>
+    <option value="JA">JA</option>
+    <option value="EPS">EPS</option>
+    <option value="PIDRA">PIDRA</option>
+    <option value="PLAC">PLAC</option>
+    <option value="SAFE_LIFE">SAFE LIFE</option>
 </select>
 
 <br>
@@ -147,6 +150,7 @@ button {
 <input 
 type="text"
 name="opis1"
+id="opis1Input"
 placeholder="Kratak opis"
 required
 >
@@ -155,6 +159,7 @@ required
 
 <textarea
 name="opis2"
+id="opis2Input"
 placeholder="Detaljniji opis">
 </textarea>
 
@@ -163,6 +168,7 @@ placeholder="Detaljniji opis">
 <input 
 type="number"
 name="trajanje"
+id="trajanjeInput"
 placeholder="Trajanje (minuti)"
 required
 >
@@ -175,19 +181,16 @@ Dodaj u TODO
 
 </form>
 
-
 <hr>
 
-
 <h2>Trenutne TODO obaveze</h2>
-
 
 <?php
 
 $result = $conn->query(
 "SELECT * FROM tasks 
-WHERE status='todo' OR status='propusteno'
-ORDER BY created_at DESC"
+ WHERE status='todo' OR status='propusteno'
+ ORDER BY created_at DESC"
 );
 
 while($row = $result->fetch_assoc()) {
@@ -268,6 +271,20 @@ function openPlan(id){
 function closePlan(){
     document.getElementById("planModal").style.display = "none";
     document.getElementById("planFrame").src = "";
+}
+
+function primeniSablon(){
+    const select = document.getElementById("sablonSelect");
+    const option = select.options[select.selectedIndex];
+
+    if (!option.value) {
+        return;
+    }
+
+    document.getElementById("kategorijaInput").value = option.getAttribute("data-kategorija");
+    document.getElementById("opis1Input").value = option.getAttribute("data-opis1");
+    document.getElementById("opis2Input").value = option.getAttribute("data-opis2");
+    document.getElementById("trajanjeInput").value = option.getAttribute("data-trajanje");
 }
 </script>
 
