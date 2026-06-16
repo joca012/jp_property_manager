@@ -102,15 +102,29 @@ button {
 
     <h2 style="margin:0;">Nova TODO obaveza</h2>
 
-    <a href="index.php" style="
-        background:#555;
-        color:#fff;
-        padding:10px 12px;
-        border-radius:5px;
-        text-decoration:none;
-    ">
-        ← Nazad
-    </a>
+    <div style="display:flex; gap:10px;">
+        <a href="sabloni.php"
+           style="
+            background:#555;
+            color:#fff;
+            padding:10px 12px;
+            border-radius:5px;
+            text-decoration:none;
+           ">
+            Šabloni
+        </a>
+
+        <a href="index.php"
+           style="
+            background:#555;
+            color:#fff;
+            padding:10px 12px;
+            border-radius:5px;
+            text-decoration:none;
+           ">
+            ← Nazad
+        </a>
+    </div>
 
 </div>
 

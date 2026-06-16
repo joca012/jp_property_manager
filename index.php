@@ -14,9 +14,9 @@ $today = date('Y-m-d');
    DNEVNI RASPORED
 ========================= */
 $sqlToday = "SELECT * FROM tasks 
-WHERE datum = '$today'
-AND status != 'obrisano'
-ORDER BY vreme ASC";
+             WHERE datum = '$today'
+             AND status != 'obrisano'
+             ORDER BY vreme ASC";
 
 $resultToday = $conn->query($sqlToday);
 
@@ -123,14 +123,16 @@ body {
     <a href="?kategorija=PIDRA">PIDRA</a>
     <a href="?kategorija=PLAC">PLAC</a>
     <a href="?kategorija=SAFE_LIFE">SAFE LIFE</a>
+	
 
-<a class="todo" href="todo.php">TODO</a>
-<a class="trash" href="recycle.php" title="Obrisano">🗑</a>
+    <a class="todo" href="todo.php">TODO</a>
+    <a class="trash" href="recycle.php" title="Obrisano">🗑</a>
+
 </div>
 
 <div class="container">
 
-<!-- ========================= LEFT (DANAS) ========================= -->
+<!-- ========================= LEFT - DNEVNI RASPORED ========================= -->
 <div class="left">
 
 <h2 style="display:flex;justify-content:space-between;align-items:center;">
@@ -143,12 +145,11 @@ body {
 <?php
 if ($resultToday && $resultToday->num_rows > 0) {
 
-    while($row = $resultToday->fetch_assoc()) {
+    while ($row = $resultToday->fetch_assoc()) {
 
         $datumFormat = date("d.m.Y.", strtotime($row['datum']));
         $vremeFormat = date("H:i", strtotime($row['vreme']));
         $statusColor = getStatusColor($row['status']);
-
         $dugme = renderActions($row);
 
         echo "
@@ -177,7 +178,7 @@ if ($resultToday && $resultToday->num_rows > 0) {
 
 </div>
 
-<!-- ========================= RIGHT ========================= -->
+<!-- ========================= RIGHT - LISTA PO KATEGORIJI ========================= -->
 <div class="right">
 
 <h2>Kategorija: <?php echo $kategorija; ?></h2>
@@ -185,7 +186,7 @@ if ($resultToday && $resultToday->num_rows > 0) {
 <?php
 if ($result && $result->num_rows > 0) {
 
-    while($row = $result->fetch_assoc()) {
+    while ($row = $result->fetch_assoc()) {
 
         if ($row['status'] == "todo" || !$row['datum']) {
             $datumFormat = "🔴 Datum: ⚠️";
@@ -201,7 +202,20 @@ if ($result && $result->num_rows > 0) {
         echo "
         <div class='card'>
 
-            <b>$datumFormat $vremeFormat</b><br><br>
+            <div style='display:flex;justify-content:space-between;align-items:center;'>
+                <b>$datumFormat $vremeFormat</b>";
+
+        if ($kategorija == "SVE") {
+            echo "
+                <span class='badge' style='background:#444;'>
+                    {$row['kategorija']}
+                </span>";
+        }
+
+        echo "
+            </div>
+
+            <br>
 
             {$row['opis1']}<br>
             {$row['opis2']}<br><br>
@@ -222,7 +236,9 @@ if ($result && $result->num_rows > 0) {
 
         echo $dugme;
 
-        echo "</div>";
+        echo "
+        </div>
+        ";
     }
 
 } else {
@@ -234,7 +250,7 @@ if ($result && $result->num_rows > 0) {
 
 </div>
 
-<!-- ========================= MODAL ========================= -->
+<!-- ========================= MODAL ZA PLANIRANJE ========================= -->
 <div id="planModal" style="
 display:none;
 position:fixed;
