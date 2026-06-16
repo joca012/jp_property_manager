@@ -91,7 +91,7 @@ if ($result && $result->num_rows > 0) {
    onclick=\"return confirm('Vratiti obavezu u TODO?')\">
    ♻ Vrati
 </a>
- | <a href='unisti.php?id={$row['id']}'
+ | <a href='spali.php?id={$row['id']}'
       onclick=\"return confirm('Trajno uništiti obavezu? Ova radnja se ne može opozvati!')\">
       💥 Spali
    </a>

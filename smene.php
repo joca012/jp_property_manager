@@ -180,7 +180,7 @@ button {
     <h2>Smene i ciklusi</h2>
 
     <div>
-        <a href="todo.php">← Nazad na TODO</a>
+        <a href="generisi_smene.php">← Nazad</a>
     </div>
 </div>
 

@@ -5,11 +5,12 @@ include "config.php";
 $poruka = "";
 $greska = "";
 
+if ($_SERVER["REQUEST_METHOD"] == "GET") {
+    unset($_SESSION['preview_smene']);
+}
+
 $ciklusi = $conn->query("SELECT * FROM ciklusi ORDER BY naziv ASC");
 
-/* =========================
-   FUNKCIJA: PROVERA KONFLIKTA
-========================= */
 function nadjiKonflikte($conn, $datum, $vreme, $trajanje) {
     $konflikti = [];
 
@@ -44,9 +45,6 @@ function nadjiKonflikte($conn, $datum, $vreme, $trajanje) {
     return $konflikti;
 }
 
-/* =========================
-   PREVIEW GENERISANJE
-========================= */
 if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['preview'])) {
 
     $ciklus_id = (int)$_POST['ciklus_id'];
@@ -63,12 +61,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['preview'])) {
 
         $sql = "
             SELECT 
-                cs.id,
-                cs.ciklus_id,
-                cs.sablon_id,
-                cs.redosled,
-                cs.broj_dana,
-                cs.tip,
+                cs.*,
                 s.naziv,
                 s.opis1,
                 s.opis2,
@@ -98,49 +91,51 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['preview'])) {
                 }
             }
 
-            if (count($prosireni_ciklus) == 0) {
-                $greska = "Ciklus je prazan.";
-            } else {
+            $preview = [];
+            $duzina_ciklusa = count($prosireni_ciklus);
 
-                $preview = [];
-                $duzina_ciklusa = count($prosireni_ciklus);
+            for ($i = 0; $i < $broj_dana; $i++) {
 
-                for ($i = 0; $i < $broj_dana; $i++) {
+                $datum = date("Y-m-d", strtotime($pocetak . " +$i days"));
+                $stavka = $prosireni_ciklus[$i % $duzina_ciklusa];
 
-                    $datum = date("Y-m-d", strtotime($pocetak . " +$i days"));
-                    $stavka = $prosireni_ciklus[$i % $duzina_ciklusa];
-
-                    if ($stavka['tip'] == 'slobodno' || empty($stavka['sablon_id'])) {
-                        continue;
-                    }
-
-                    $konflikti = nadjiKonflikte(
-                        $conn,
-                        $datum,
-                        $stavka['vreme'],
-                        $stavka['trajanje']
-                    );
-
+                if ($stavka['tip'] == 'slobodno' || empty($stavka['sablon_id'])) {
                     $preview[] = [
                         "datum" => $datum,
-                        "naziv" => $stavka['naziv'],
-                        "opis1" => $stavka['opis1'],
-                        "opis2" => $stavka['opis2'],
-                        "vreme" => $stavka['vreme'],
-                        "trajanje" => $stavka['trajanje'],
-                        "konflikti" => $konflikti
+                        "opis1" => "SLOBODAN DAN",
+                        "opis2" => "",
+                        "vreme" => "",
+                        "trajanje" => 0,
+                        "konflikti" => [],
+                        "tip" => "slobodno"
                     ];
+
+                    continue;
                 }
 
-                $_SESSION['preview_smene'] = $preview;
+                $konflikti = nadjiKonflikte(
+                    $conn,
+                    $datum,
+                    $stavka['vreme'],
+                    $stavka['trajanje']
+                );
+
+                $preview[] = [
+                    "datum" => $datum,
+                    "opis1" => $stavka['opis1'],
+                    "opis2" => $stavka['opis2'],
+                    "vreme" => $stavka['vreme'],
+                    "trajanje" => $stavka['trajanje'],
+                    "konflikti" => $konflikti,
+                    "tip" => "smena"
+                ];
             }
+
+            $_SESSION['preview_smene'] = $preview;
         }
     }
 }
 
-/* =========================
-   POTVRDA UPISA
-========================= */
 if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['potvrdi_upis'])) {
 
     if (empty($_SESSION['preview_smene'])) {
@@ -152,13 +147,16 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['potvrdi_upis'])) {
 
         foreach ($_SESSION['preview_smene'] as $smena) {
 
+            if (($smena['tip'] ?? '') == 'slobodno') {
+                continue;
+            }
+
             $datum = $conn->real_escape_string($smena['datum']);
             $vreme = $conn->real_escape_string($smena['vreme']);
             $opis1 = $conn->real_escape_string($smena['opis1']);
             $opis2 = $conn->real_escape_string($smena['opis2']);
             $trajanje = (int)$smena['trajanje'];
 
-            // Zaštita od duplog generisanja iste smene
             $check = $conn->query("
                 SELECT id 
                 FROM tasks
@@ -203,7 +201,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['potvrdi_upis'])) {
 
 $preview = $_SESSION['preview_smene'] ?? [];
 ?>
-
 <!DOCTYPE html>
 <html lang="sr">
 <head>
@@ -211,92 +208,27 @@ $preview = $_SESSION['preview_smene'] ?? [];
     <title>Generisanje smena</title>
 
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            background: #f4f6f8;
-            padding: 20px;
-        }
-
-        .box {
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-        }
-
-        input, select, button {
-            padding: 8px;
-            margin: 5px;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            background: white;
-        }
-
-        th, td {
-            padding: 10px;
-            border-bottom: 1px solid #ddd;
-            vertical-align: top;
-        }
-
-        th {
-            background: #eee;
-        }
-
-        .ok {
-            color: green;
-            font-weight: bold;
-        }
-
-        .konflikt {
-            color: red;
-            font-weight: bold;
-        }
-
-        .red-konflikt {
-            background: #fff3f3;
-        }
-
-        .poruka {
-            background: #d4edda;
-            padding: 10px;
-            border-radius: 6px;
-            margin-bottom: 15px;
-        }
-
-        .greska {
-            background: #f8d7da;
-            padding: 10px;
-            border-radius: 6px;
-            margin-bottom: 15px;
-        }
-
-        .dugme {
-            text-decoration: none;
-            background: #555;
-            color: white;
-            padding: 8px 12px;
-            border-radius: 5px;
-            display: inline-block;
-            margin-bottom: 15px;
-        }
-
-        .potvrdi {
-            background: #198754;
-            color: white;
-            border: none;
-            cursor: pointer;
-            font-weight: bold;
-            padding: 10px 15px;
-        }
+        body { font-family: Arial, sans-serif; background: #f4f6f8; padding: 20px; }
+        .box { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; }
+        input, select, button { padding: 8px; margin: 5px; }
+        table { width: 100%; border-collapse: collapse; background: white; }
+        th, td { padding: 10px; border-bottom: 1px solid #ddd; vertical-align: top; }
+        th { background: #eee; }
+        .ok { color: green; font-weight: bold; }
+        .konflikt { color: red; font-weight: bold; }
+        .red-konflikt { background: #fff3f3; }
+        .slobodno { background: #eef7ff; color: #0d6efd; font-weight: bold; }
+        .poruka { background: #d4edda; padding: 10px; border-radius: 6px; margin-bottom: 15px; }
+        .greska { background: #f8d7da; padding: 10px; border-radius: 6px; margin-bottom: 15px; }
+        .dugme { text-decoration: none; background: #555; color: white; padding: 8px 12px; border-radius: 5px; display: inline-block; margin-bottom: 15px; }
+        .potvrdi { background: #198754; color: white; border: none; cursor: pointer; font-weight: bold; padding: 10px 15px; }
     </style>
 </head>
 
 <body>
 
 <a class="dugme" href="index.php">← Nazad</a>
+<a class="dugme" href="smene.php">Smene</a>
 
 <h2>Generisanje smena</h2>
 
@@ -311,10 +243,8 @@ $preview = $_SESSION['preview_smene'] ?? [];
 <div class="box">
     <form method="post">
         <label>Ciklus:</label>
-
         <select name="ciklus_id" required>
             <option value="">-- izaberi ciklus --</option>
-
             <?php if ($ciklusi): ?>
                 <?php while ($c = $ciklusi->fetch_assoc()): ?>
                     <option value="<?= $c['id'] ?>">
@@ -340,7 +270,6 @@ $preview = $_SESSION['preview_smene'] ?? [];
 
     <?php
         $broj_konflikata = 0;
-
         foreach ($preview as $smena) {
             if (!empty($smena['konflikti'])) {
                 $broj_konflikata++;
@@ -354,9 +283,7 @@ $preview = $_SESSION['preview_smene'] ?? [];
             Smene će ipak biti upisane ako potvrdiš.
         </div>
     <?php else: ?>
-        <div class="poruka">
-            Nema konflikata u izabranom periodu.
-        </div>
+        <div class="poruka">Nema konflikata u izabranom periodu.</div>
     <?php endif; ?>
 
     <table>
@@ -377,12 +304,16 @@ $preview = $_SESSION['preview_smene'] ?? [];
                     <small><?= htmlspecialchars($smena['opis2']) ?></small>
                 </td>
 
-                <td><?= substr($smena['vreme'], 0, 5) ?></td>
+                <td><?= !empty($smena['vreme']) ? substr($smena['vreme'], 0, 5) : '-' ?></td>
 
-                <td><?= (int)$smena['trajanje'] ?> min</td>
+                <td><?= !empty($smena['trajanje']) ? (int)$smena['trajanje'] . ' min' : '-' ?></td>
 
                 <td>
-                    <?php if (empty($smena['konflikti'])): ?>
+                    <?php if (($smena['tip'] ?? '') == 'slobodno'): ?>
+
+                        <span class="slobodno">🏖 Slobodan dan</span>
+
+                    <?php elseif (empty($smena['konflikti'])): ?>
 
                         <span class="ok">✅ Slobodno</span>
 
@@ -413,7 +344,7 @@ $preview = $_SESSION['preview_smene'] ?? [];
 
     <br>
 
-    <form method="post" onsubmit="return confirm('Potvrđuješ upis svih prikazanih smena, uključujući i one koje imaju konflikt?');">
+    <form method="post" onsubmit="return confirm('Potvrđuješ upis samo smena? Slobodni dani se neće upisati kao taskovi.');">
         <button class="potvrdi" type="submit" name="potvrdi_upis">
             Potvrdi upis smena
         </button>
