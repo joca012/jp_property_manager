@@ -75,6 +75,11 @@ body {
     background: red !important;
 }
 
+.trash {
+    background: #6c757d !important;
+    font-size: 18px;
+}
+
 .container {
     display: flex;
     height: calc(100vh - 70px);
@@ -119,7 +124,8 @@ body {
     <a href="?kategorija=PLAC">PLAC</a>
     <a href="?kategorija=SAFE_LIFE">SAFE LIFE</a>
 
-    <a class="todo" href="todo.php">TODO</a>
+<a class="todo" href="todo.php">TODO</a>
+<a class="trash" href="recycle.php" title="Obrisano">🗑</a>
 </div>
 
 <div class="container">
