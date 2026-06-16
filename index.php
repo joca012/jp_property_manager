@@ -124,7 +124,7 @@ body {
     <a href="?kategorija=PLAC">PLAC</a>
     <a href="?kategorija=SAFE_LIFE">SAFE LIFE</a>
 	
-
+    <a href="generisi_smene.php">Generiši smene</a>
     <a class="todo" href="todo.php">TODO</a>
     <a class="trash" href="recycle.php" title="Obrisano">🗑</a>
 
