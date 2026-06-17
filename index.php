@@ -1,4 +1,5 @@
 <?php
+
 include "config.php";
 include "functions.php";
 
@@ -7,6 +8,7 @@ autoUpdateStatus($conn);
 /* =========================
    FILTER
 ========================= */
+
 $kategorija = $_GET['kategorija'] ?? 'SVE';
 $datum = $_GET['datum'] ?? date('Y-m-d');
 $sedmica = isset($_GET['sedmica']) && $_GET['sedmica'] == 1;
@@ -18,6 +20,7 @@ $datumSql = $conn->real_escape_string($datum);
 /* =========================
    LINK HELPER
 ========================= */
+
 function linkSaParametrima($kategorija, $datum, $sedmica = false, $slobodno = false) {
     $url = "index.php?kategorija=" . urlencode($kategorija) . "&datum=" . urlencode($datum);
 
@@ -35,9 +38,14 @@ function linkSaParametrima($kategorija, $datum, $sedmica = false, $slobodno = fa
 /* =========================
    DATUMI ZA NAVIGACIJU
 ========================= */
+
 $juce = date('Y-m-d', strtotime($datum . ' -1 day'));
 $danas = date('Y-m-d');
 $sutra = date('Y-m-d', strtotime($datum . ' +1 day'));
+
+/* =========================
+   DNEVNI / SEDMIČNI RASPORED
+========================= */
 
 if ($sedmica) {
     $pocetakSedmice = date('Y-m-d', strtotime('monday this week', strtotime($datum)));
@@ -65,6 +73,7 @@ $resultToday = $conn->query($sqlToday);
 /* =========================
    GLAVNI UPIT - DESNO
 ========================= */
+
 if ($kategorija == "SVE") {
     $sql = "
         SELECT *
@@ -83,6 +92,7 @@ if ($kategorija == "SVE") {
 }
 
 $result = $conn->query($sql);
+
 ?>
 
 <!DOCTYPE html>
@@ -162,6 +172,16 @@ body {
     font-size: 12px;
 }
 
+.blink {
+    animation: blink 1s infinite;
+}
+
+@keyframes blink {
+    0% { opacity: 1; }
+    50% { opacity: 0.25; }
+    100% { opacity: 1; }
+}
+
 .nav-datum {
     display: flex;
     gap: 8px;
@@ -218,9 +238,9 @@ body {
 </style>
 
 </head>
+
 <body>
 
-<!-- ========================= HEADER ========================= -->
 <div class="header">
     <a href="<?= linkSaParametrima('SVE', $datum, $sedmica, $slobodno) ?>">SVE</a>
     <a href="<?= linkSaParametrima('JA', $datum, $sedmica, $slobodno) ?>">JA</a>
@@ -231,12 +251,11 @@ body {
 
     <a href="generisi_smene.php">Generiši smene</a>
     <a class="todo" href="todo.php">TODO</a>
-    <a class="trash" href="recycle.php" title="Obrisano">🗑</a>
+    <a class="trash" href="recycle.php" title="Obrisano"></a>
 </div>
 
 <div class="container">
 
-<!-- ========================= LEFT - DNEVNI / SEDMIČNI RASPORED ========================= -->
 <div class="left">
 
 <h2 style="display:flex;justify-content:space-between;align-items:center;">
@@ -254,7 +273,6 @@ body {
 </h2>
 
 <div class="nav-datum">
-
     <div class="nav-levo">
         <a href="<?= linkSaParametrima($kategorija, $juce, false, $slobodno) ?>">← Juče</a>
         <a href="<?= linkSaParametrima($kategorija, $danas, false, $slobodno) ?>">Danas</a>
@@ -270,7 +288,6 @@ body {
             <a href="<?= linkSaParametrima($kategorija, $datum, $sedmica, true) ?>">Prikaži slobodno vreme</a>
         <?php endif; ?>
     </div>
-
 </div>
 
 <?php if ($slobodno && $sedmica): ?>
@@ -281,19 +298,19 @@ body {
 <?php endif; ?>
 
 <?php
+
 if ($resultToday && $resultToday->num_rows > 0) {
-
     $trenutniDatum = "";
-
     $prethodniKraj = strtotime($datum . " 06:00:00");
     $krajDana = strtotime($datum . " 23:59:00");
 
     while ($row = $resultToday->fetch_assoc()) {
-
         $datumFormat = date("d.m.Y.", strtotime($row['datum']));
         $vremeFormat = !empty($row['vreme']) ? date("H:i", strtotime($row['vreme'])) : "";
         $statusColor = getStatusColor($row['status']);
         $dugme = renderActions($row);
+
+        $blinkClass = isTaskInProgress($row) ? " blink" : "";
 
         if ($sedmica && $trenutniDatum != $row['datum']) {
             $trenutniDatum = $row['datum'];
@@ -301,7 +318,6 @@ if ($resultToday && $resultToday->num_rows > 0) {
         }
 
         if ($slobodno && !$sedmica && !empty($row['vreme']) && (int)$row['trajanje'] > 0) {
-
             $pocetakTaska = strtotime($row['datum'] . " " . $row['vreme']);
             $krajTaska = strtotime("+" . (int)$row['trajanje'] . " minutes", $pocetakTaska);
 
@@ -326,7 +342,7 @@ if ($resultToday && $resultToday->num_rows > 0) {
                 {$row['opis1']}<br>
                 Trajanje: {$row['trajanje']} min<br><br>
 
-                <span class='badge' style='background:$statusColor'>
+                <span class='badge$blinkClass' style='background:$statusColor'>
                     {$row['status']}
                 </span>
 
@@ -343,9 +359,7 @@ if ($resultToday && $resultToday->num_rows > 0) {
             </div>
         ";
     }
-
 } else {
-
     if ($slobodno && !$sedmica) {
         echo "
             <div class='card slobodan-termin'>
@@ -357,20 +371,19 @@ if ($resultToday && $resultToday->num_rows > 0) {
         echo $sedmica ? "Nema obaveza za ovu sedmicu." : "Nema obaveza za izabrani dan.";
     }
 }
+
 ?>
 
 </div>
 
-<!-- ========================= RIGHT - LISTA PO KATEGORIJI ========================= -->
 <div class="right">
 
-<h2>Kategorija: <?php echo htmlspecialchars($kategorija); ?></h2>
+<h2>Kategorija: <?= htmlspecialchars($kategorija) ?></h2>
 
 <?php
+
 if ($result && $result->num_rows > 0) {
-
     while ($row = $result->fetch_assoc()) {
-
         if ($row['status'] == "todo" || !$row['datum']) {
             $datumFormat = "Datum: ⚠️";
             $vremeFormat = "Vreme: ⚠️";
@@ -381,6 +394,8 @@ if ($result && $result->num_rows > 0) {
 
         $statusColor = getStatusColor($row['status']);
         $dugme = renderActions($row);
+
+        $blinkClass = isTaskInProgress($row) ? " blink" : "";
 
         echo "
             <div class='card'>
@@ -404,7 +419,7 @@ if ($result && $result->num_rows > 0) {
                 {$row['opis1']}<br>
                 {$row['opis2']}<br><br>
 
-                <span class='badge' style='background:$statusColor'>
+                <span class='badge$blinkClass' style='background:$statusColor'>
                     {$row['status']}
                 </span>
         ";
@@ -425,17 +440,16 @@ if ($result && $result->num_rows > 0) {
             </div>
         ";
     }
-
 } else {
     echo "Nema obaveza za ovu kategoriju.";
 }
+
 ?>
 
 </div>
 
 </div>
 
-<!-- ========================= MODAL ZA PLANIRANJE ========================= -->
 <div id="planModal" style="
 display:none;
 position:fixed;
