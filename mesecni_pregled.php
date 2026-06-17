@@ -138,6 +138,10 @@ body {
     box-shadow: 0 2px 5px rgba(0,0,0,0.1);
 }
 
+.day.prosao-dan {
+    background: #f8d7da !important;
+}
+
 .empty {
     background: transparent;
     box-shadow: none;
@@ -228,7 +232,10 @@ for ($dan = 1; $dan <= $brojDana; $dan++) {
         }
     }
 
-    echo "<div class='day'>";
+    $prosaoDan = strtotime($datumDana . ' 23:59:59') < time();
+    $prosaoDanClass = $prosaoDan ? ' prosao-dan' : '';
+
+    echo "<div class='day$prosaoDanClass'>";
     echo "<div class='day-number'>$dan. " . skraceniDan($datumDana) . "</div>";
 
     if ($brojObaveza > 0) {

@@ -179,6 +179,12 @@ body {
     text-align: center;
 }
 
+.day-header.prosao-dan-kalendar {
+    background: #f8d7da;
+    color: #333;
+    border-color: #e6aeb7;
+}
+
 .time-column {
     position: relative;
     height: <?= ($endHour - $startHour) * $hourHeight ?>px;
@@ -208,6 +214,16 @@ body {
             #ffffff 0px,
             #ffffff <?= $hourHeight - 1 ?>px,
             #e5e5e5 <?= $hourHeight ?>px
+        );
+}
+
+.day-column.prosao-dan-kalendar {
+    background:
+        repeating-linear-gradient(
+            to bottom,
+            #f8d7da 0px,
+            #f8d7da <?= $hourHeight - 1 ?>px,
+            #e6aeb7 <?= $hourHeight ?>px
         );
 }
 
@@ -321,7 +337,8 @@ body {
     <div class="time-header"></div>
 
     <?php foreach ($dani as $dan): ?>
-        <div class="day-header">
+        <?php $prosaoDanClass = (strtotime($dan . ' 23:59:59') < time()) ? ' prosao-dan-kalendar' : ''; ?>
+        <div class="day-header<?= $prosaoDanClass ?>">
             <?= srpskiDan($dan) ?><br>
             <?= date('d.m.', strtotime($dan)) ?>
         </div>
@@ -336,7 +353,8 @@ body {
     </div>
 
     <?php foreach ($dani as $dan): ?>
-        <div class="day-column">
+        <?php $prosaoDanClass = (strtotime($dan . ' 23:59:59') < time()) ? ' prosao-dan-kalendar' : ''; ?>
+        <div class="day-column<?= $prosaoDanClass ?>">
 
             <?php for ($h = $startHour; $h < $endHour; $h++): ?>
                 <div class="calendar-slot"

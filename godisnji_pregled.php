@@ -207,6 +207,12 @@ body {
     border-color: transparent;
 }
 
+.day-cell.prosao-dan {
+    background: #f8d7da !important;
+    color: #666 !important;
+    border-color: #e5bfc4 !important;
+}
+
 .day-cell a {
     color: inherit;
     text-decoration: none;
@@ -378,9 +384,11 @@ body {
 
                 $blinkClass = $blink ? " blink" : "";
                 $hasTasksClass = $hasTasks ? " has-tasks" : "";
+                $prosaoDan = strtotime($datumDana . ' 23:59:59') < time();
+                $prosaoDanClass = $prosaoDan ? ' prosao-dan' : '';
                 ?>
 
-                <div class="day-cell<?= $hasTasksClass ?><?= $blinkClass ?>"
+                <div class="day-cell<?= $hasTasksClass ?><?= $blinkClass ?><?= $prosaoDanClass ?>"
                      style="background:<?= $boja ?>;">
                     <a href="calendar.php?view=week&datum=<?= $datumDana ?>">
                         <?= $dan ?>
