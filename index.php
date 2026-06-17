@@ -250,6 +250,7 @@ body {
     <a href="<?= linkSaParametrima('SAFE_LIFE', $datum, $sedmica, $slobodno) ?>">SAFE LIFE</a>
 
     <a href="generisi_smene.php">Generiši smene</a>
+	<a href="calendar.php?view=week">📅 Kalendar</a>
     <a class="todo" href="todo.php">TODO</a>
     <a class="trash" href="recycle.php" title="Obrisano"></a>
 </div>
