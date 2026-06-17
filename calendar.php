@@ -12,19 +12,56 @@ $krajSedmice = date('Y-m-d', strtotime($pocetakSedmice . ' +6 days'));
 $prethodnaSedmica = date('Y-m-d', strtotime($pocetakSedmice . ' -7 days'));
 $sledecaSedmica = date('Y-m-d', strtotime($pocetakSedmice . ' +7 days'));
 
+$dani = [];
+for ($i = 0; $i < 7; $i++) {
+    $dani[] = date('Y-m-d', strtotime($pocetakSedmice . " +$i days"));
+}
+
+$startHour = 06;
+$endHour = 24;
+$hourHeight = 55;
+
+/* Uzimamo i dan pre sedmice zbog treće smene koja prelazi preko ponoći */
+$danPreSedmice = date('Y-m-d', strtotime($pocetakSedmice . ' -1 day'));
+
 $sql = "
     SELECT *
     FROM tasks
     WHERE status != 'obrisano'
-    AND datum BETWEEN '$pocetakSedmice' AND '$krajSedmice'
+    AND datum BETWEEN '$danPreSedmice' AND '$krajSedmice'
     ORDER BY datum, vreme
 ";
+
 $result = $conn->query($sql);
 
 $tasksByDate = [];
 
 while ($row = $result->fetch_assoc()) {
-    $tasksByDate[$row['datum']][] = $row;
+    if (empty($row['datum']) || empty($row['vreme'])) {
+        continue;
+    }
+
+    $start = strtotime($row['datum'] . ' ' . $row['vreme']);
+    $trajanje = (int)$row['trajanje'];
+
+    if ($trajanje <= 0) {
+        $trajanje = 30;
+    }
+
+    $end = $start + ($trajanje * 60);
+
+    foreach ($dani as $dan) {
+$dayStart = strtotime($dan . ' ' . str_pad($startHour, 2, '0', STR_PAD_LEFT) . ':00:00');
+$dayEnd = strtotime($dan . ' 23:59:59');
+
+        if ($start <= $dayEnd && $end >= $dayStart) {
+            $segment = $row;
+            $segment['segment_start'] = max($start, $dayStart);
+            $segment['segment_end'] = min($end, $dayEnd);
+
+            $tasksByDate[$dan][] = $segment;
+        }
+    }
 }
 
 $sqlTodo = "
@@ -33,12 +70,8 @@ $sqlTodo = "
     WHERE status = 'todo'
     ORDER BY created_at DESC
 ";
-$resultTodo = $conn->query($sqlTodo);
 
-$dani = [];
-for ($i = 0; $i < 7; $i++) {
-    $dani[] = date('Y-m-d', strtotime($pocetakSedmice . " +$i days"));
-}
+$resultTodo = $conn->query($sqlTodo);
 
 function srpskiDan($datum) {
     $dani = [
@@ -53,10 +86,6 @@ function srpskiDan($datum) {
 
     return $dani[date('l', strtotime($datum))];
 }
-
-$startHour = 6;
-$endHour = 24;
-$hourHeight = 60;
 ?>
 
 <!DOCTYPE html>
@@ -205,11 +234,7 @@ body {
     overflow: hidden;
     z-index: 5;
     box-shadow: 0 2px 5px rgba(0,0,0,0.25);
-}
-
-.task-block a {
-    color: white;
-    text-decoration: none;
+    cursor: default;
 }
 
 .task-time {
@@ -217,9 +242,14 @@ body {
     margin-bottom: 4px;
 }
 
+.task-title {
+    font-weight: bold;
+}
+
 .task-status {
     font-size: 11px;
     opacity: 0.95;
+    margin-top: 4px;
 }
 
 .blink {
@@ -231,6 +261,16 @@ body {
     50% { opacity: 0.25; }
     100% { opacity: 1; }
 }
+.task-block {
+    transition: all 0.2s ease;
+    overflow: hidden;
+}
+
+.task-block.expanded {
+    z-index: 999;
+    min-height: 120px !important;
+    overflow: visible;
+}
 </style>
 </head>
 
@@ -239,8 +279,8 @@ body {
 <div class="header">
     <a href="index.php">← Kontrolna tabla</a>
     <a href="calendar.php?view=week&datum=<?= $datum ?>">Nedeljni</a>
-    <a href="#">Mesečni</a>
-    <a href="#">Godišnji</a>
+	<a href="mesecni_pregled.php?datum=<?= $datum ?>">Mesečni</a>
+	<a href="godisnji_pregled.php?godina=<?= date('Y', strtotime($datum)) ?>">Godišnji</a>
 </div>
 
 <div class="container">
@@ -309,12 +349,10 @@ body {
             <?php if (!empty($tasksByDate[$dan])): ?>
                 <?php foreach ($tasksByDate[$dan] as $task): ?>
                     <?php
-                    if (empty($task['vreme'])) {
-                        continue;
-                    }
+                    $startTimestamp = $task['segment_start'];
+                    $endTimestamp = $task['segment_end'];
 
-                    $startTimestamp = strtotime($task['datum'] . " " . $task['vreme']);
-                    $startDayTimestamp = strtotime($task['datum'] . " " . str_pad($startHour, 2, '0', STR_PAD_LEFT) . ":00:00");
+                    $startDayTimestamp = strtotime($dan . " " . str_pad($startHour, 2, '0', STR_PAD_LEFT) . ":00:00");
 
                     $minutesFromStart = ($startTimestamp - $startDayTimestamp) / 60;
 
@@ -324,33 +362,30 @@ body {
 
                     $top = ($minutesFromStart / 60) * $hourHeight;
 
-                    $trajanje = (int)$task['trajanje'];
-                    if ($trajanje <= 0) {
-                        $trajanje = 30;
-                    }
-
-                    $height = max(28, ($trajanje / 60) * $hourHeight);
+                    $trajanjeSegmenta = ($endTimestamp - $startTimestamp) / 60;
+                    $height = max(28, ($trajanjeSegmenta / 60) * $hourHeight);
 
                     $statusColor = getStatusColor($task['status']);
                     $blinkClass = isTaskInProgress($task) ? " blink" : "";
 
-                    $vremeOd = date('H:i', strtotime($task['vreme']));
-                    $vremeDo = date('H:i', strtotime("+$trajanje minutes", $startTimestamp));
+                    $vremeOd = date('H:i', $startTimestamp);
+                    $vremeDo = date('H:i', $endTimestamp);
                     ?>
 
                     <div class="task-block<?= $blinkClass ?>"
-                         style="
-                            top: <?= $top ?>px;
-                            height: <?= $height ?>px;
-                            background: <?= $statusColor ?>;
-                         ">
+					onclick="toggleTask(this)"
+					style="
+							top: <?= $top ?>px;
+							height: <?= $height ?>px;
+							background: <?= $statusColor ?>;
+					">
                         <div class="task-time">
                             <?= $vremeOd ?> - <?= $vremeDo ?>
                         </div>
 
-                        <a href="planiraj.php?id=<?= $task['id'] ?>">
+                        <div class="task-title">
                             <?= htmlspecialchars($task['opis1']) ?>
-                        </a>
+                        </div>
 
                         <div class="task-status">
                             <?= htmlspecialchars($task['kategorija']) ?> |
@@ -418,6 +453,17 @@ document.querySelectorAll('.calendar-slot').forEach(slot => {
         });
     });
 });
+
+function toggleTask(el) {
+
+    document.querySelectorAll('.task-block.expanded').forEach(item => {
+        if (item !== el) {
+            item.classList.remove('expanded');
+        }
+    });
+
+    el.classList.toggle('expanded');
+}
 </script>
 
 </body>
