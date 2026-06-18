@@ -12,11 +12,25 @@ $sledecaGodina = $godina + 1;
 $prviDan = "$godina-01-01";
 $poslednjiDan = "$godina-12-31";
 
+$periodStartSql = $prviDan . ' 00:00:00';
+$periodEndSql = $poslednjiDan . ' 23:59:59';
+
+/*
+   Uzimamo sve obaveze koje se PREKLAPAJU sa godinom,
+   ne samo one koje počinju u toj godini.
+   Ovo rešava višednevne obaveze preko granice meseca/godine.
+*/
 $sql = "
     SELECT *
     FROM tasks
     WHERE status != 'obrisano'
-    AND datum BETWEEN '$prviDan' AND '$poslednjiDan'
+    AND datum IS NOT NULL
+    AND vreme IS NOT NULL
+    AND CONCAT(datum, ' ', vreme) <= '$periodEndSql'
+    AND DATE_ADD(
+        CONCAT(datum, ' ', vreme),
+        INTERVAL COALESCE(NULLIF(trajanje, 0), 30) MINUTE
+    ) >= '$periodStartSql'
     ORDER BY datum, vreme
 ";
 
@@ -24,8 +38,53 @@ $result = $conn->query($sql);
 
 $tasksByDate = [];
 
+function dodajTaskPoDanimaGodisnje(&$tasksByDate, $row, $prviDan, $poslednjiDan) {
+    if (empty($row['datum']) || empty($row['vreme'])) {
+        return;
+    }
+
+    $start = strtotime($row['datum'] . ' ' . $row['vreme']);
+    $trajanje = (int)$row['trajanje'];
+
+    if ($trajanje <= 0) {
+        $trajanje = 30;
+    }
+
+    $end = $start + ($trajanje * 60);
+
+    if ($end <= $start) {
+        return;
+    }
+
+    $periodStart = strtotime($prviDan . ' 00:00:00');
+    $periodEnd = strtotime($poslednjiDan . ' 23:59:59');
+
+    $firstDay = date('Y-m-d', max($start, $periodStart));
+    $lastDay = date('Y-m-d', min($end - 1, $periodEnd));
+
+    $currentDay = $firstDay;
+
+    while (strtotime($currentDay) <= strtotime($lastDay)) {
+        $dayStart = strtotime($currentDay . ' 00:00:00');
+        $dayEnd = strtotime($currentDay . ' 23:59:59');
+
+        $segmentStart = max($start, $dayStart);
+        $segmentEnd = min($end, $dayEnd);
+
+        if ($segmentEnd > $segmentStart) {
+            $segment = $row;
+            $segment['segment_start'] = $segmentStart;
+            $segment['segment_end'] = $segmentEnd;
+            $segment['segment_minutes'] = max(1, (int)ceil(($segmentEnd - $segmentStart) / 60));
+            $tasksByDate[$currentDay][] = $segment;
+        }
+
+        $currentDay = date('Y-m-d', strtotime($currentDay . ' +1 day'));
+    }
+}
+
 while ($row = $result->fetch_assoc()) {
-    $tasksByDate[$row['datum']][] = $row;
+    dodajTaskPoDanimaGodisnje($tasksByDate, $row, $prviDan, $poslednjiDan);
 }
 
 function nazivMesecaGodisnji($mesec) {
@@ -80,7 +139,7 @@ function bojaDana($tasks) {
         }
 
         if ($task['status'] != 'todo') {
-            $ukupnoMinuta += (int)$task['trajanje'];
+            $ukupnoMinuta += (int)($task['segment_minutes'] ?? $task['trajanje']);
         }
     }
 
@@ -378,7 +437,7 @@ body {
 
                     if ($task['status'] != 'todo') {
                         $brojObaveza++;
-                        $ukupnoMinuta += (int)$task['trajanje'];
+                        $ukupnoMinuta += (int)($task['segment_minutes'] ?? $task['trajanje']);
                     }
                 }
 
@@ -407,7 +466,7 @@ body {
                             <br>
                             <?php foreach ($tasks as $task): ?>
                                 <?php if (!empty($task['vreme'])): ?>
-                                    <?= date('H:i', strtotime($task['vreme'])) ?>
+                                    <?= date('H:i', $task['segment_start'] ?? strtotime($task['vreme'])) ?>
                                 <?php endif; ?>
                                 <?= htmlspecialchars($task['opis1']) ?><br>
                             <?php endforeach; ?>

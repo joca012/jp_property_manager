@@ -58,6 +58,7 @@ function isTaskInProgress($row) {
 }
 
 function renderActions($row) {
+
     $dugme = "";
 
     if ($row['status'] != "zavrseno") {
@@ -68,8 +69,17 @@ function renderActions($row) {
         $dugme .= " | <a href='otkazi.php?id={$row['id']}'>✖ Otkaži</a>";
     }
 
+    if ($row['status'] == "zavrseno") {
+        $dugme .= " | <a href='vrati.php?id={$row['id']}'>↩ Vrati</a>";
+    }
+	
+	if ($row['status'] == "todo" || $row['status'] == "propusteno") {
+
+    $dugme .= " | <a href='izmeni.php?id={$row['id']}'>✏ Izmeni</a>";
+	}
+
     if ($row['status'] != "obrisano") {
-        $dugme .= " | <a href='obrisi.php?id={$row['id']}' onclick=\"return confirm('Premestiti obavezu u korpu?')\"> Obriši</a>";
+        $dugme .= " | <a href='obrisi.php?id={$row['id']}' onclick=\"return confirm('Premestiti obavezu u korpu?')\">🗑 Obriši</a>";
     }
 
     return $dugme;
@@ -89,4 +99,17 @@ function deleteTask($conn, $id) {
     ";
 
     return $conn->query($sql);
+}
+function srpskiDan($datum) {
+    $dani = [
+        'Monday' => 'Ponedeljak',
+        'Tuesday' => 'Utorak',
+        'Wednesday' => 'Sreda',
+        'Thursday' => 'Četvrtak',
+        'Friday' => 'Petak',
+        'Saturday' => 'Subota',
+        'Sunday' => 'Nedelja'
+    ];
+
+    return $dani[date('l', strtotime($datum))];
 }

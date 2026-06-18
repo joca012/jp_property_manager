@@ -15,7 +15,15 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && !isset($_POST['id'])) {
     $kategorija = $_POST['kategorija'];
     $opis1 = $_POST['opis1'];
     $opis2 = $_POST['opis2'];
-    $trajanje = (int)$_POST['trajanje'];
+    $trajanje_dani = (int)($_POST['trajanje_dani'] ?? 0);
+    $trajanje_sati = (int)($_POST['trajanje_sati'] ?? 0);
+    $trajanje_minuti = (int)($_POST['trajanje_minuti'] ?? 0);
+
+    $trajanje = ($trajanje_dani * 1440) + ($trajanje_sati * 60) + $trajanje_minuti;
+
+    if ($trajanje <= 0) {
+        $trajanje = 30;
+    }
     $sablon_id = !empty($_POST['sablon_id']) ? (int)$_POST['sablon_id'] : "NULL";
 
     $sql = "INSERT INTO tasks
@@ -59,6 +67,23 @@ input, textarea, select {
     width:300px;
     padding:8px;
     margin:5px;
+}
+
+.trajanje-row {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    margin: 5px;
+}
+
+.trajanje-row input {
+    width: 90px;
+    margin-left: 0;
+}
+
+.trajanje-row small {
+    font-size: 12px;
+    color: #555;
 }
 
 button {
@@ -165,13 +190,42 @@ placeholder="Detaljniji opis">
 
 <br>
 
-<input 
-type="number"
-name="trajanje"
-id="trajanjeInput"
-placeholder="Trajanje (minuti)"
-required
->
+<label>Trajanje</label><br>
+
+<div class="trajanje-row">
+    <div>
+        <small>Dani</small><br>
+        <input
+            type="number"
+            name="trajanje_dani"
+            id="trajanjeDani"
+            value="0"
+            min="0"
+        >
+    </div>
+
+    <div>
+        <small>Sati</small><br>
+        <input
+            type="number"
+            name="trajanje_sati"
+            id="trajanjeSati"
+            value="0"
+            min="0"
+        >
+    </div>
+
+    <div>
+        <small>Minuta</small><br>
+        <input
+            type="number"
+            name="trajanje_minuti"
+            id="trajanjeMinuti"
+            value="30"
+            min="0"
+        >
+    </div>
+</div>
 
 <br>
 
@@ -210,7 +264,20 @@ Trajanje: {$row['trajanje']} min
 <br><br>
 
 <a href='#' onclick='openPlan({$row['id']}); return false;'>
-    ✏ Planiraj
+    📅 Planiraj
+</a>
+
+ |
+
+<a href='izmeni.php?id={$row['id']}&return=todo.php'>
+    ✏ Izmeni
+</a>
+
+ |
+
+<a href='obrisi.php?id={$row['id']}'
+   onclick=\"return confirm('Premestiti obavezu u korpu?')\">
+    🗑 Obriši
 </a>
 
 </div>
@@ -284,7 +351,17 @@ function primeniSablon(){
     document.getElementById("kategorijaInput").value = option.getAttribute("data-kategorija");
     document.getElementById("opis1Input").value = option.getAttribute("data-opis1");
     document.getElementById("opis2Input").value = option.getAttribute("data-opis2");
-    document.getElementById("trajanjeInput").value = option.getAttribute("data-trajanje");
+    const trajanje = parseInt(option.getAttribute("data-trajanje")) || 0;
+
+    const dani = Math.floor(trajanje / 1440);
+    const ostatakPosleDana = trajanje % 1440;
+
+    const sati = Math.floor(ostatakPosleDana / 60);
+    const minuti = ostatakPosleDana % 60;
+
+    document.getElementById("trajanjeDani").value = dani;
+    document.getElementById("trajanjeSati").value = sati;
+    document.getElementById("trajanjeMinuti").value = minuti;
 }
 </script>
 

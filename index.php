@@ -252,7 +252,7 @@ body {
     <a href="generisi_smene.php">Generiši smene</a>
 	<a href="calendar.php?view=week">📅 Kalendar</a>
     <a class="todo" href="todo.php">TODO</a>
-    <a class="trash" href="recycle.php" title="Obrisano"></a>
+    <a class="trash" href="recycle.php" title="Obrisano">🗑</a>
 </div>
 
 <div class="container">
@@ -268,6 +268,7 @@ body {
             -
             <?= date("d.m.Y.", strtotime($krajSedmice)) ?>
         <?php else: ?>
+            <?= srpskiDan($datum) ?>,
             <?= date("d.m.Y.", strtotime($datum)) ?>
         <?php endif; ?>
     </span>
@@ -427,12 +428,12 @@ if ($result && $result->num_rows > 0) {
 
         if ($row['status'] == "todo" || $row['status'] == "propusteno") {
             echo "
-                <a href='#'
-                   onclick='openPlan({$row['id']}); return false;'
-                   style='margin-left:10px;color:#333;'>
-                   ✏ Planiraj
-                </a>
-            ";
+    <a href='#'
+       onclick='openPlan({$row['id']}); return false;'
+       style='margin-left:10px;color:#333;'>
+       📅 Planiraj
+    </a>
+";
         }
 
         echo $dugme;

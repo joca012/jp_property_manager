@@ -5,6 +5,9 @@ include "functions.php";
 autoUpdateStatus($conn);
 
 $datum = $_GET['datum'] ?? date('Y-m-d');
+$todoKategorija = $_GET['todo_kategorija'] ?? 'SVE';
+$todoKategorijaSql = $conn->real_escape_string($todoKategorija);
+$todoFilterParam = '&todo_kategorija=' . urlencode($todoKategorija);
 
 $pocetakSedmice = date('Y-m-d', strtotime('monday this week', strtotime($datum)));
 $krajSedmice = date('Y-m-d', strtotime($pocetakSedmice . ' +6 days'));
@@ -20,15 +23,25 @@ for ($i = 0; $i < 7; $i++) {
 $startHour = 06;
 $endHour = 24;
 $hourHeight = 55;
+$slotMinutes = 30;
+$slotHeight = $hourHeight / 2;
 
-/* Uzimamo i dan pre sedmice zbog treće smene koja prelazi preko ponoći */
-$danPreSedmice = date('Y-m-d', strtotime($pocetakSedmice . ' -1 day'));
+/*
+   Uzimamo sve obaveze koje se PREKLAPAJU sa prikazanom sedmicom.
+   Ovo rešava višednevne obaveze koje počnu u prethodnoj sedmici,
+   ali se nastavljaju u ovoj sedmici.
+*/
+$sedmicaStart = $pocetakSedmice . ' 00:00:00';
+$sedmicaEnd = date('Y-m-d', strtotime($pocetakSedmice . ' +7 days')) . ' 00:00:00';
 
 $sql = "
     SELECT *
     FROM tasks
     WHERE status != 'obrisano'
-    AND datum BETWEEN '$danPreSedmice' AND '$krajSedmice'
+    AND datum IS NOT NULL
+    AND vreme IS NOT NULL
+    AND CONCAT(datum, ' ', vreme) < '$sedmicaEnd'
+    AND DATE_ADD(CONCAT(datum, ' ', vreme), INTERVAL IFNULL(NULLIF(trajanje, 0), 30) MINUTE) > '$sedmicaStart'
     ORDER BY datum, vreme
 ";
 
@@ -64,27 +77,39 @@ $dayEnd = strtotime($dan . ' 23:59:59');
     }
 }
 
-$sqlTodo = "
-    SELECT *
-    FROM tasks
-    WHERE status = 'todo'
-    ORDER BY created_at DESC
-";
+if ($todoKategorija == 'SVE') {
+    $sqlTodo = "
+        SELECT *
+        FROM tasks
+        WHERE status = 'todo'
+        ORDER BY created_at DESC
+    ";
+} else {
+    $sqlTodo = "
+        SELECT *
+        FROM tasks
+        WHERE status = 'todo'
+        AND kategorija = '$todoKategorijaSql'
+        ORDER BY created_at DESC
+    ";
+}
 
 $resultTodo = $conn->query($sqlTodo);
 
-function srpskiDan($datum) {
-    $dani = [
-        'Monday' => 'Ponedeljak',
-        'Tuesday' => 'Utorak',
-        'Wednesday' => 'Sreda',
-        'Thursday' => 'Četvrtak',
-        'Friday' => 'Petak',
-        'Saturday' => 'Subota',
-        'Sunday' => 'Nedelja'
-    ];
+if (!function_exists('srpskiDan')) {
+    function srpskiDan($datum) {
+        $dani = [
+            'Monday' => 'Ponedeljak',
+            'Tuesday' => 'Utorak',
+            'Wednesday' => 'Sreda',
+            'Thursday' => 'Četvrtak',
+            'Friday' => 'Petak',
+            'Saturday' => 'Subota',
+            'Sunday' => 'Nedelja'
+        ];
 
-    return $dani[date('l', strtotime($datum))];
+        return $dani[date('l', strtotime($datum))];
+    }
 }
 ?>
 
@@ -143,6 +168,17 @@ body {
     border-left: 5px solid #ffc107;
     border-radius: 5px;
     cursor: grab;
+}
+
+.todo-filter {
+    margin-bottom: 15px;
+}
+
+.todo-filter select {
+    width: 100%;
+    padding: 8px;
+    border-radius: 5px;
+    border: 1px solid #ccc;
 }
 
 .nav {
@@ -212,8 +248,11 @@ body {
         repeating-linear-gradient(
             to bottom,
             #ffffff 0px,
+            #ffffff <?= $slotHeight - 1 ?>px,
+            #f1f1f1 <?= $slotHeight ?>px,
+            #ffffff <?= $slotHeight + 1 ?>px,
             #ffffff <?= $hourHeight - 1 ?>px,
-            #e5e5e5 <?= $hourHeight ?>px
+            #dcdcdc <?= $hourHeight ?>px
         );
 }
 
@@ -222,6 +261,9 @@ body {
         repeating-linear-gradient(
             to bottom,
             #f8d7da 0px,
+            #f8d7da <?= $slotHeight - 1 ?>px,
+            #efc8cf <?= $slotHeight ?>px,
+            #f8d7da <?= $slotHeight + 1 ?>px,
             #f8d7da <?= $hourHeight - 1 ?>px,
             #e6aeb7 <?= $hourHeight ?>px
         );
@@ -231,7 +273,7 @@ body {
     position: absolute;
     left: 0;
     right: 0;
-    height: <?= $hourHeight ?>px;
+    height: <?= $slotHeight ?>px;
 }
 
 .drop-target {
@@ -268,6 +310,17 @@ body {
     margin-top: 4px;
 }
 
+.task-actions {
+    margin-top: 6px;
+    font-size: 11px;
+}
+
+.task-actions a {
+    color: white;
+    text-decoration: underline;
+    font-weight: bold;
+}
+
 .blink {
     animation: blink 1s infinite;
 }
@@ -294,7 +347,7 @@ body {
 
 <div class="header">
     <a href="index.php">← Kontrolna tabla</a>
-    <a href="calendar.php?view=week&datum=<?= $datum ?>">Nedeljni</a>
+    <a href="calendar.php?view=week&datum=<?= $datum ?><?= $todoFilterParam ?>">Nedeljni</a>
 	<a href="mesecni_pregled.php?datum=<?= $datum ?>">Mesečni</a>
 	<a href="godisnji_pregled.php?godina=<?= date('Y', strtotime($datum)) ?>">Godišnji</a>
 </div>
@@ -303,6 +356,20 @@ body {
 
 <div class="todo-panel">
     <h3>TODO obaveze</h3>
+
+    <form method="GET" class="todo-filter">
+        <input type="hidden" name="view" value="week">
+        <input type="hidden" name="datum" value="<?= htmlspecialchars($datum) ?>">
+
+        <label for="todo_kategorija"><b>Kategorija</b></label><br>
+        <select name="todo_kategorija" id="todo_kategorija" onchange="this.form.submit()">
+            <?php foreach (['SVE', 'JA', 'EPS', 'PIDRA', 'PLAC', 'SAFE_LIFE'] as $kat): ?>
+                <option value="<?= $kat ?>" <?= $todoKategorija == $kat ? 'selected' : '' ?>>
+                    <?= $kat == 'SAFE_LIFE' ? 'SAFE LIFE' : $kat ?>
+                </option>
+            <?php endforeach; ?>
+        </select>
+    </form>
 
     <?php if ($resultTodo && $resultTodo->num_rows > 0): ?>
         <?php while ($todo = $resultTodo->fetch_assoc()): ?>
@@ -313,16 +380,16 @@ body {
             </div>
         <?php endwhile; ?>
     <?php else: ?>
-        <p>Nema TODO obaveza.</p>
+        <p>Nema TODO obaveza za izabrani filter.</p>
     <?php endif; ?>
 </div>
 
 <div class="calendar">
 
 <div class="nav">
-    <a href="calendar.php?view=week&datum=<?= $prethodnaSedmica ?>">← Prethodna sedmica</a>
-    <a href="calendar.php?view=week&datum=<?= date('Y-m-d') ?>">Ova sedmica</a>
-    <a href="calendar.php?view=week&datum=<?= $sledecaSedmica ?>">Sledeća sedmica →</a>
+    <a href="calendar.php?view=week&datum=<?= $prethodnaSedmica ?><?= $todoFilterParam ?>">← Prethodna sedmica</a>
+    <a href="calendar.php?view=week&datum=<?= date('Y-m-d') ?><?= $todoFilterParam ?>">Ova sedmica</a>
+    <a href="calendar.php?view=week&datum=<?= $sledecaSedmica ?><?= $todoFilterParam ?>">Sledeća sedmica →</a>
 </div>
 
 <h2>
@@ -357,11 +424,17 @@ body {
         <div class="day-column<?= $prosaoDanClass ?>">
 
             <?php for ($h = $startHour; $h < $endHour; $h++): ?>
-                <div class="calendar-slot"
-                     data-date="<?= $dan ?>"
-                     data-time="<?= str_pad($h, 2, '0', STR_PAD_LEFT) ?>:00:00"
-                     style="top: <?= ($h - $startHour) * $hourHeight ?>px;">
-                </div>
+                <?php foreach ([0, 30] as $m): ?>
+                    <?php
+                    $slotTime = str_pad($h, 2, '0', STR_PAD_LEFT) . ':' . str_pad($m, 2, '0', STR_PAD_LEFT) . ':00';
+                    $slotTop = (($h - $startHour) * 60 + $m) / 60 * $hourHeight;
+                    ?>
+                    <div class="calendar-slot"
+                         data-date="<?= $dan ?>"
+                         data-time="<?= $slotTime ?>"
+                         style="top: <?= $slotTop ?>px;">
+                    </div>
+                <?php endforeach; ?>
             <?php endfor; ?>
 
             <?php if (!empty($tasksByDate[$dan])): ?>
@@ -409,6 +482,15 @@ body {
                             <?= htmlspecialchars($task['kategorija']) ?> |
                             <?= htmlspecialchars($task['status']) ?>
                         </div>
+
+                        <?php if ($task['status'] == 'zakazano' || $task['status'] == 'propusteno'): ?>
+                            <div class="task-actions" onclick="event.stopPropagation();">
+                                <a href="otkazi.php?id=<?= $task['id'] ?>&return=<?= urlencode('calendar.php?view=week&datum=' . $datum) ?>"
+								style="color:white;font-size:11px;text-decoration:underline;">
+								✖ Otkaži
+								</a>
+                            </div>
+                        <?php endif; ?>
                     </div>
 
                 <?php endforeach; ?>

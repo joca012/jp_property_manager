@@ -5,7 +5,7 @@ $id = $_GET['id'] ?? 0;
 
 if ($id > 0) {
 
-    $sql = "UPDATE tasks 
+    $sql = "UPDATE tasks
             SET status='todo',
                 datum=NULL,
                 vreme=NULL
@@ -14,5 +14,8 @@ if ($id > 0) {
     $conn->query($sql);
 }
 
-header("Location: index.php");
+/* Povratak na stranicu sa koje je pozvano */
+$return = $_GET['return'] ?? 'index.php';
+
+header("Location: " . $return);
 exit;
