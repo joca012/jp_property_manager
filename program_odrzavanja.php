@@ -11,27 +11,77 @@ if (!$result || $result->num_rows == 0) {
 
 $sz = $result->fetch_assoc();
 
-$meseci = [
-    1 => 'Januar',
-    2 => 'Februar',
-    3 => 'Mart',
-    4 => 'April',
-    5 => 'Maj',
-    6 => 'Jun',
-    7 => 'Jul',
-    8 => 'Avgust',
-    9 => 'Septembar',
-    10 => 'Oktobar',
-    11 => 'Novembar',
-    12 => 'Decembar'
-];
+/*
+    Novi prikaz:
+    - ne grupiše odmah po mesecima
+    - prikazuje stavke programa održavanja
+    - predviđa učestalost i sledeću kontrolu
+
+    Potrebne kolone u program_odrzavanja:
+    kategorija
+    ucestalost_tip
+    ucestalost_broj
+    datum_prve_kontrole
+    datum_sledece_kontrole
+    nacin_obracuna
+*/
 
 $program = $conn->query("
     SELECT *
     FROM program_odrzavanja
     WHERE sz_id = $sz_id
-    ORDER BY mesec, obavezna DESC, aktivnost
+    ORDER BY aktivnost
 ");
+
+function prikaziUcestalost($row) {
+    $tip = $row['ucestalost_tip'] ?? '';
+    $broj = (int)($row['ucestalost_broj'] ?? 0);
+
+    if ($tip === '' || $broj <= 0) {
+        return '-';
+    }
+
+    if ($tip === 'meseci') {
+        return "na $broj meseci";
+    }
+
+    if ($tip === 'godina') {
+        return $broj == 1 ? "godišnje" : "na $broj godine";
+    }
+
+    if ($tip === 'nedeljno') {
+        return "$broj x nedeljno";
+    }
+
+    if ($tip === 'mesecno') {
+        return "$broj x mesečno";
+    }
+
+    return htmlspecialchars($tip . ' ' . $broj);
+}
+
+function prikaziDatum($datum) {
+    if (!$datum || $datum === '0000-00-00') {
+        return '-';
+    }
+
+    return date('d.m.Y', strtotime($datum));
+}
+
+function prikaziObracun($vrednost) {
+    if (!$vrednost) {
+        return '-';
+    }
+
+    $mapa = [
+        'po_kontroli' => 'po kontroli',
+        'mesecno' => 'mesečno',
+        'godisnje' => 'godišnje',
+        'po_intervenciji' => 'po intervenciji'
+    ];
+
+    return $mapa[$vrednost] ?? htmlspecialchars($vrednost);
+}
 ?>
 
 <!DOCTYPE html>
@@ -43,9 +93,11 @@ $program = $conn->query("
 </head>
 <body>
 
+<?php include "header.php"; ?>
+
 <div class="container">
 
-    <div style="display:flex;justify-content:space-between;align-items:center;">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:20px;">
         <div>
             <h1>Program održavanja</h1>
             <p>
@@ -54,64 +106,73 @@ $program = $conn->query("
             </p>
         </div>
 
-        <a class="btn" href="generisi_program.php?sz_id=<?= $sz_id ?>"
-           onclick="return confirm('Generisati novi program? Postojeći program za ovu zgradu biće obrisan.')">
-           Generiši program
-        </a>
+        <div>
+            <a class="btn" href="generisi_program.php?sz_id=<?= $sz_id ?>"
+               onclick="return confirm('Generisati novi program? Postojeći program za ovu zgradu biće obrisan.')">
+               Generiši program
+            </a>
+        </div>
     </div>
 
-    <?php foreach ($meseci as $broj => $naziv): ?>
+    <h2>Stavke održavanja</h2>
 
-        <h2><?= $naziv ?></h2>
+    <table>
+        <tr>
+            <th>Aktivnost</th>
+            <th>Kategorija</th>
+            <th>Učestalost</th>
+            <th>Prva kontrola</th>
+            <th>Sledeća kontrola</th>
+            <th>Trošak</th>
+            <th>Obračun</th>
+            <th>Obavezno</th>
+            <th>Status</th>
+            <th>Ponude</th>
+        </tr>
 
-        <table>
-            <tr>
-                <th>Aktivnost</th>
-                <th>Trošak</th>
-                <th>Obavezno</th>
-                <th>Status</th>
-                <th>Napomena</th>
-            </tr>
-
-            <?php
-            $ima = false;
-
-            if ($program) {
-                $program->data_seek(0);
-                while ($row = $program->fetch_assoc()):
-                    if ((int)$row['mesec'] !== $broj) {
-                        continue;
-                    }
-
-                    $ima = true;
-            ?>
-
+        <?php if ($program && $program->num_rows > 0): ?>
+            <?php while ($row = $program->fetch_assoc()): ?>
                 <tr>
-                    <td><?= htmlspecialchars($row['aktivnost']) ?></td>
-                    <td><?= number_format($row['procenjeni_trosak'], 2, ',', '.') ?> RSD</td>
+                    <td>
+                        <strong><?= htmlspecialchars($row['aktivnost']) ?></strong>
+
+                        <?php if (!empty($row['napomena'])): ?>
+                            <br><small><?= nl2br(htmlspecialchars($row['napomena'])) ?></small>
+                        <?php endif; ?>
+                    </td>
+
+                    <td><?= htmlspecialchars($row['kategorija'] ?? '') ?></td>
+
+                    <td><?= prikaziUcestalost($row) ?></td>
+
+                    <td><?= prikaziDatum($row['datum_prve_kontrole'] ?? null) ?></td>
+
+                    <td><?= prikaziDatum($row['datum_sledece_kontrole'] ?? null) ?></td>
+
+                    <td><?= number_format((float)$row['procenjeni_trosak'], 2, ',', '.') ?> RSD</td>
+
+                    <td><?= prikaziObracun($row['nacin_obracuna'] ?? null) ?></td>
+
                     <td><?= $row['obavezna'] ? 'Da' : 'Ne' ?></td>
+
                     <td><?= $row['zavrsena'] ? 'Završeno' : 'Planirano' ?></td>
-                    <td><?= nl2br(htmlspecialchars($row['napomena'])) ?></td>
+
+                    <td>
+                        <a class="btn" href="program_ponude.php?program_id=<?= $row['id'] ?>">
+                            Ponude
+                        </a>
+                    </td>
                 </tr>
-
-            <?php
-                endwhile;
-            }
-
-            if (!$ima):
-            ?>
-
-                <tr>
-                    <td colspan="5">Nema planiranih aktivnosti.</td>
-                </tr>
-
-            <?php endif; ?>
-
-        </table>
-
-    <?php endforeach; ?>
+            <?php endwhile; ?>
+        <?php else: ?>
+            <tr>
+                <td colspan="10">Nema unetih stavki programa održavanja.</td>
+            </tr>
+        <?php endif; ?>
+    </table>
 
     <br>
+
     <a href="zajednica.php?id=<?= $sz_id ?>">← Nazad na zajednicu</a>
 
 </div>

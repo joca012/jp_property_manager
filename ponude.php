@@ -3,6 +3,16 @@ include "config.php";
 
 $izvodjac_id = (int)($_GET['izvodjac_id'] ?? $_POST['izvodjac_id'] ?? 0);
 
+/* =========================
+   KATEGORIJE RADOVA
+========================= */
+$kategorije = $conn->query("
+    SELECT *
+    FROM kategorije_radova
+    WHERE aktivna = 1
+    ORDER BY naziv
+");
+
 $izvodjac = null;
 
 if ($izvodjac_id > 0) {
@@ -18,27 +28,50 @@ if ($izvodjac_id > 0) {
     }
 }
 
-/* DODAVANJE PONUDE */
+/* =========================
+   DODAVANJE PONUDE
+========================= */
 if ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_POST['dodaj_ponudu'])) {
 
-    $naziv = $_POST['naziv'];
+    $naziv = trim($_POST['naziv'] ?? '');
+    $kategorija = trim($_POST['kategorija'] ?? '');
     $datum_ponude = $_POST['datum_ponude'] ?: null;
     $vazi_do = $_POST['vazi_do'] ?: null;
-    $dobavljac = $izvodjac ? $izvodjac['naziv'] : $_POST['dobavljac'];
+    $dobavljac = $izvodjac ? $izvodjac['naziv'] : trim($_POST['dobavljac'] ?? '');
+
+    if ($naziv === '') {
+        die("Naziv ponude je obavezan.");
+    }
+
+    if ($kategorija === '') {
+        die("Kategorija ponude je obavezna.");
+    }
 
     $stmt = $conn->prepare("
         INSERT INTO ponude
-        (naziv, dobavljac, izvodjac_id, datum_ponude, vazi_do)
-        VALUES (?, ?, ?, ?, ?)
+        (naziv, kategorija, dobavljac, izvodjac_id, datum_ponude, vazi_do)
+        VALUES (?, ?, ?, ?, ?, ?)
     ");
 
-    $stmt->bind_param("ssiss", $naziv, $dobavljac, $izvodjac_id, $datum_ponude, $vazi_do);
+    $stmt->bind_param(
+        "sssiss",
+        $naziv,
+        $kategorija,
+        $dobavljac,
+        $izvodjac_id,
+        $datum_ponude,
+        $vazi_do
+    );
+
     $stmt->execute();
 
     header("Location: ponude.php" . ($izvodjac_id ? "?izvodjac_id=".$izvodjac_id : ""));
     exit;
 }
 
+/* =========================
+   LISTA PONUDA
+========================= */
 if ($izvodjac_id > 0) {
     $ponude = $conn->query("
         SELECT *
@@ -88,6 +121,20 @@ if ($izvodjac_id > 0) {
                 <label>Naziv ponude</label>
                 <input type="text" name="naziv" required>
 
+                <label>Kategorija</label>
+                <select name="kategorija" required>
+                    <option value="">-- Izaberi kategoriju --</option>
+
+                    <?php if ($kategorije): ?>
+                        <?php $kategorije->data_seek(0); ?>
+                        <?php while ($k = $kategorije->fetch_assoc()): ?>
+                            <option value="<?= htmlspecialchars($k['naziv']) ?>">
+                                <?= htmlspecialchars($k['naziv']) ?>
+                            </option>
+                        <?php endwhile; ?>
+                    <?php endif; ?>
+                </select>
+
                 <?php if (!$izvodjac): ?>
                     <label>Dobavljač</label>
                     <input type="text" name="dobavljac">
@@ -109,6 +156,7 @@ if ($izvodjac_id > 0) {
             <table>
                 <tr>
                     <th>Naziv</th>
+                    <th>Kategorija</th>
                     <th>Dobavljač</th>
                     <th>Datum</th>
                     <th>Važi do</th>
@@ -119,6 +167,7 @@ if ($izvodjac_id > 0) {
                     <?php while($p = $ponude->fetch_assoc()): ?>
                         <tr>
                             <td><?= htmlspecialchars($p['naziv']) ?></td>
+                            <td><?= htmlspecialchars($p['kategorija'] ?? '') ?></td>
                             <td><?= htmlspecialchars($p['dobavljac']) ?></td>
                             <td><?= htmlspecialchars($p['datum_ponude']) ?></td>
                             <td><?= htmlspecialchars($p['vazi_do']) ?></td>
@@ -132,7 +181,7 @@ if ($izvodjac_id > 0) {
                     <?php endwhile; ?>
                 <?php else: ?>
                     <tr>
-                        <td colspan="5">Nema unetih ponuda.</td>
+                        <td colspan="6">Nema unetih ponuda.</td>
                     </tr>
                 <?php endif; ?>
 
