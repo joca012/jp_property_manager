@@ -55,7 +55,7 @@ if ($sedmica) {
         SELECT *
         FROM tasks
         WHERE datum BETWEEN '$pocetakSedmice' AND '$krajSedmice'
-        AND status != 'obrisano'
+        AND status NOT IN ('obrisano', 'propusteno')
         ORDER BY datum ASC, vreme ASC
     ";
 } else {
@@ -63,7 +63,7 @@ if ($sedmica) {
         SELECT *
         FROM tasks
         WHERE datum = '$datumSql'
-        AND status != 'obrisano'
+        AND status NOT IN ('obrisano', 'propusteno')
         ORDER BY vreme ASC
     ";
 }
@@ -79,7 +79,17 @@ if ($kategorija == "SVE") {
         SELECT *
         FROM tasks
         WHERE status != 'obrisano'
-        ORDER BY datum, vreme
+        ORDER BY
+            CASE
+                WHEN status = 'propusteno' THEN 0
+                WHEN status = 'todo' THEN 1
+                WHEN status = 'zakazano' THEN 2
+                WHEN status = 'zavrseno' THEN 3
+                ELSE 4
+            END,
+            created_at DESC,
+            datum ASC,
+            vreme ASC
     ";
 } else {
     $sql = "
@@ -87,7 +97,17 @@ if ($kategorija == "SVE") {
         FROM tasks
         WHERE kategorija = '$kategorijaSql'
         AND status != 'obrisano'
-        ORDER BY datum, vreme
+        ORDER BY
+            CASE
+                WHEN status = 'propusteno' THEN 0
+                WHEN status = 'todo' THEN 1
+                WHEN status = 'zakazano' THEN 2
+                WHEN status = 'zavrseno' THEN 3
+                ELSE 4
+            END,
+            created_at DESC,
+            datum ASC,
+            vreme ASC
     ";
 }
 
@@ -253,6 +273,7 @@ body {
 	<a href="calendar.php?view=week">📅 Kalendar</a>
     <a class="todo" href="todo.php">TODO</a>
     <a class="trash" href="recycle.php" title="Obrisano">🗑</a>
+    <a href="logout.php" title="Odjava">Odjava</a>
 </div>
 
 <div class="container">
@@ -268,8 +289,7 @@ body {
             -
             <?= date("d.m.Y.", strtotime($krajSedmice)) ?>
         <?php else: ?>
-            <?= srpskiDan($datum) ?>,
-            <?= date("d.m.Y.", strtotime($datum)) ?>
+            <?= srpskiDan($datum) ?>, <?= date("d.m.Y.", strtotime($datum)) ?>
         <?php endif; ?>
     </span>
 </h2>
@@ -428,12 +448,12 @@ if ($result && $result->num_rows > 0) {
 
         if ($row['status'] == "todo" || $row['status'] == "propusteno") {
             echo "
-    <a href='#'
-       onclick='openPlan({$row['id']}); return false;'
-       style='margin-left:10px;color:#333;'>
-       📅 Planiraj
-    </a>
-";
+                <a href='#'
+                   onclick='openPlan({$row['id']}); return false;'
+                   style='margin-left:10px;color:#333;'>
+                   📅 Planiraj
+                </a>
+            ";
         }
 
         echo $dugme;

@@ -345,6 +345,7 @@ body {
     <a href="calendar.php?view=week&datum=<?= date('Y-m-d') ?>">Nedeljni</a>
     <a href="mesecni_pregled.php?datum=<?= date('Y-m-d') ?>">Mesečni</a>
     <a href="godisnji_pregled.php?godina=<?= $godina ?>">Godišnji</a>
+    <a href="logout.php" title="Odjava">Odjava</a>
 </div>
 
 <div class="container">

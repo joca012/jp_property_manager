@@ -37,7 +37,7 @@ $sedmicaEnd = date('Y-m-d', strtotime($pocetakSedmice . ' +7 days')) . ' 00:00:0
 $sql = "
     SELECT *
     FROM tasks
-    WHERE status != 'obrisano'
+    WHERE status NOT IN ('obrisano', 'propusteno')
     AND datum IS NOT NULL
     AND vreme IS NOT NULL
     AND CONCAT(datum, ' ', vreme) < '$sedmicaEnd'
@@ -81,16 +81,16 @@ if ($todoKategorija == 'SVE') {
     $sqlTodo = "
         SELECT *
         FROM tasks
-        WHERE status = 'todo'
-        ORDER BY created_at DESC
+        WHERE status IN ('todo', 'propusteno')
+        ORDER BY FIELD(status, 'propusteno', 'todo'), created_at DESC
     ";
 } else {
     $sqlTodo = "
         SELECT *
         FROM tasks
-        WHERE status = 'todo'
+        WHERE status IN ('todo', 'propusteno')
         AND kategorija = '$todoKategorijaSql'
-        ORDER BY created_at DESC
+        ORDER BY FIELD(status, 'propusteno', 'todo'), created_at DESC
     ";
 }
 
@@ -168,6 +168,11 @@ body {
     border-left: 5px solid #ffc107;
     border-radius: 5px;
     cursor: grab;
+}
+
+.todo-card.propusteno {
+    background: #f8d7da;
+    border-left-color: #dc3545;
 }
 
 .todo-filter {
@@ -350,6 +355,7 @@ body {
     <a href="calendar.php?view=week&datum=<?= $datum ?><?= $todoFilterParam ?>">Nedeljni</a>
 	<a href="mesecni_pregled.php?datum=<?= $datum ?>">Mesečni</a>
 	<a href="godisnji_pregled.php?godina=<?= date('Y', strtotime($datum)) ?>">Godišnji</a>
+    <a href="logout.php" title="Odjava">Odjava</a>
 </div>
 
 <div class="container">
@@ -373,10 +379,14 @@ body {
 
     <?php if ($resultTodo && $resultTodo->num_rows > 0): ?>
         <?php while ($todo = $resultTodo->fetch_assoc()): ?>
-            <div class="todo-card" draggable="true" data-id="<?= $todo['id'] ?>">
+            <?php $todoBlinkClass = ($todo['status'] == 'propusteno') ? ' propusteno blink' : ''; ?>
+            <div class="todo-card<?= $todoBlinkClass ?>" draggable="true" data-id="<?= $todo['id'] ?>">
                 <b><?= htmlspecialchars($todo['opis1']) ?></b><br>
                 <?= htmlspecialchars($todo['kategorija']) ?><br>
                 <?= (int)$todo['trajanje'] ?> min
+                <?php if ($todo['status'] == 'propusteno'): ?>
+                    <br><b>⚠ Propušteno — zakazati ponovo</b>
+                <?php endif; ?>
             </div>
         <?php endwhile; ?>
     <?php else: ?>
@@ -485,10 +495,10 @@ body {
 
                         <?php if ($task['status'] == 'zakazano' || $task['status'] == 'propusteno'): ?>
                             <div class="task-actions" onclick="event.stopPropagation();">
-                                <a href="otkazi.php?id=<?= $task['id'] ?>&return=<?= urlencode('calendar.php?view=week&datum=' . $datum) ?>"
-								style="color:white;font-size:11px;text-decoration:underline;">
-								✖ Otkaži
-								</a>
+                                <a href="otkazi.php?id=<?= $task['id'] ?>&return=<?= urlencode('calendar.php?view=week&datum=' . $datum . $todoFilterParam) ?>"
+                                   onclick="return confirm('Vratiti obavezu u TODO?')">
+                                    ✖ Otkaži
+                                </a>
                             </div>
                         <?php endif; ?>
                     </div>

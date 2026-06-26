@@ -20,9 +20,16 @@ function getStatusColor($status) {
 function autoUpdateStatus($conn) {
     $now = date('Y-m-d H:i:s');
 
+    /*
+       Obaveza koja nije potvrđena kao završena 24h nakon isteka
+       prelazi u status propusteno i skida joj se datum/vreme.
+       Tako se vraća u TODO tok i mora ponovo da se zakaže.
+    */
     $sql = "
         UPDATE tasks
-        SET status = 'propusteno'
+        SET status = 'propusteno',
+            datum = NULL,
+            vreme = NULL
         WHERE status = 'zakazano'
         AND datum IS NOT NULL
         AND vreme IS NOT NULL
@@ -33,10 +40,26 @@ function autoUpdateStatus($conn) {
     ";
 
     $conn->query($sql);
+
+    /*
+       Čišćenje ranije propuštenih obaveza koje su ostale sa starim terminom
+       iz prethodne verzije logike.
+    */
+    $conn->query("
+        UPDATE tasks
+        SET datum = NULL,
+            vreme = NULL
+        WHERE status = 'propusteno'
+        AND (datum IS NOT NULL OR vreme IS NOT NULL)
+    ");
 }
 
 function isTaskInProgress($row) {
-    if ($row['status'] != "zakazano") {
+    if (($row['status'] ?? '') == "propusteno") {
+        return true;
+    }
+
+    if (($row['status'] ?? '') != "zakazano") {
         return false;
     }
 
@@ -57,29 +80,45 @@ function isTaskInProgress($row) {
     return ($now >= $start && $now <= $end);
 }
 
-function renderActions($row) {
+function currentReturnUrl() {
+    $uri = $_SERVER['REQUEST_URI'] ?? 'index.php';
+
+    $path = parse_url($uri, PHP_URL_PATH) ?: 'index.php';
+    $query = parse_url($uri, PHP_URL_QUERY);
+
+    $file = basename($path);
+
+    if ($file == '' || $file == '/') {
+        $file = 'index.php';
+    }
+
+    return $file . ($query ? '?' . $query : '');
+}
+
+function renderActions($row, $returnUrl = null) {
+    $id = (int)$row['id'];
+    $status = $row['status'] ?? '';
+    $return = urlencode($returnUrl ?? currentReturnUrl());
 
     $dugme = "";
 
-    if ($row['status'] != "zavrseno") {
-        $dugme .= "<br><br><a href='zavrsi.php?id={$row['id']}'>✔ Završi</a>";
+    if ($status == "zakazano") {
+        $dugme .= "<br><br><a href='zavrsi.php?id=$id&return=$return'>✔ Završi</a>";
+        $dugme .= " | <a href='otkazi.php?id=$id&return=$return'>✖ Otkaži</a>";
+        $dugme .= " | <a href='izmeni.php?id=$id&return=$return'>✏ Izmeni</a>";
     }
 
-    if ($row['status'] != "zavrseno" && $row['status'] != "todo") {
-        $dugme .= " | <a href='otkazi.php?id={$row['id']}'>✖ Otkaži</a>";
+    if ($status == "zavrseno") {
+        $dugme .= "<br><br><a href='vrati.php?id=$id&return=$return'>↩ Vrati</a>";
+        $dugme .= " | <a href='izmeni.php?id=$id&return=$return'>✏ Izmeni</a>";
     }
 
-    if ($row['status'] == "zavrseno") {
-        $dugme .= " | <a href='vrati.php?id={$row['id']}'>↩ Vrati</a>";
+    if ($status == "todo" || $status == "propusteno") {
+        $dugme .= "<br><br><a href='izmeni.php?id=$id&return=$return'>✏ Izmeni</a>";
     }
-	
-	if ($row['status'] == "todo" || $row['status'] == "propusteno") {
 
-    $dugme .= " | <a href='izmeni.php?id={$row['id']}'>✏ Izmeni</a>";
-	}
-
-    if ($row['status'] != "obrisano") {
-        $dugme .= " | <a href='obrisi.php?id={$row['id']}' onclick=\"return confirm('Premestiti obavezu u korpu?')\">🗑 Obriši</a>";
+    if ($status != "obrisano") {
+        $dugme .= " | <a href='obrisi.php?id=$id' onclick=\"return confirm('Premestiti obavezu u korpu?')\">🗑 Obriši</a>";
     }
 
     return $dugme;
@@ -100,6 +139,7 @@ function deleteTask($conn, $id) {
 
     return $conn->query($sql);
 }
+
 function srpskiDan($datum) {
     $dani = [
         'Monday' => 'Ponedeljak',

@@ -181,6 +181,7 @@ button {
 
     <div>
         <a href="generisi_smene.php">← Nazad</a>
+        <a href="logout.php">Odjava</a>
     </div>
 </div>
 

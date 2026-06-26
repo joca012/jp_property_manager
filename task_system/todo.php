@@ -128,6 +128,17 @@ button {
            ">
             ← Nazad
         </a>
+
+        <a href="logout.php"
+           style="
+            background:#6c757d;
+            color:#fff;
+            padding:10px 12px;
+            border-radius:5px;
+            text-decoration:none;
+           ">
+            Odjava
+        </a>
     </div>
 
 </div>

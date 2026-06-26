@@ -1,10 +1,9 @@
 <?php
 include "config.php";
 
-$id = $_GET['id'] ?? 0;
+$id = (int)($_GET['id'] ?? 0);
 
 if ($id > 0) {
-
     $sql = "UPDATE tasks
             SET status='todo',
                 datum=NULL,
@@ -14,8 +13,11 @@ if ($id > 0) {
     $conn->query($sql);
 }
 
-/* Povratak na stranicu sa koje je pozvano */
 $return = $_GET['return'] ?? 'index.php';
+
+if (preg_match('/^(https?:)?\/\//i', $return) || preg_match('/[\r\n]/', $return)) {
+    $return = 'index.php';
+}
 
 header("Location: " . $return);
 exit;

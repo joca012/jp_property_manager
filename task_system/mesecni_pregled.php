@@ -246,6 +246,7 @@ body {
     <a href="calendar.php?view=week&datum=<?= $datum ?>">Nedeljni</a>
     <a href="mesecni_pregled.php?datum=<?= $datum ?>">Mesečni</a>
     <a href="godisnji_pregled.php?godina=<?= $godina ?>">Godišnji</a>
+    <a href="logout.php" title="Odjava">Odjava</a>
 </div>
 
 <div class="container">

@@ -61,6 +61,7 @@ body {
 
 <div class="header">
     <a href="index.php">← Nazad</a>
+    <a href="logout.php" title="Odjava">Odjava</a>
 </div>
 
 <div class="container">

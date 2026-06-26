@@ -1,25 +1,21 @@
 <?php
-
 include "config.php";
 
+$id = (int)($_GET['id'] ?? 0);
 
-$id = $_GET['id'];
+if ($id > 0) {
+    $sql = "UPDATE tasks
+            SET status='zavrseno'
+            WHERE id=$id";
 
+    $conn->query($sql);
+}
 
-$sql = "
+$return = $_GET['return'] ?? 'index.php';
 
-UPDATE tasks
+if (preg_match('/^(https?:)?\/\//i', $return) || preg_match('/[\r\n]/', $return)) {
+    $return = 'index.php';
+}
 
-SET status='zavrseno'
-
-WHERE id=$id
-
-";
-
-
-$conn->query($sql);
-
-
-header("Location: index.php");
-
-?>
+header("Location: " . $return);
+exit;
