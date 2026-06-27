@@ -115,6 +115,26 @@ function ensure_finansijski_plan_schema($conn) {
         INDEX idx_plan_rebalans (plan_id, datum),
         CONSTRAINT fk_fin_plan_rebalansi_plan FOREIGN KEY (plan_id) REFERENCES finansijski_planovi(id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+    // v2.1: stavke finansijskog plana dobijaju mesečno važenje i osnov obračuna.
+    // Ovo je kompatibilno sa starim stavkama: stare se tretiraju kao fiksne godišnje/mesečne stavke.
+    $col = fn($name) => $conn->query("SHOW COLUMNS FROM finansijski_plan_stavke LIKE '" . $conn->real_escape_string($name) . "'");
+    $res = $col('osnov');
+    if ($res && $res->num_rows === 0) {
+        $conn->query("ALTER TABLE finansijski_plan_stavke ADD COLUMN osnov VARCHAR(40) NOT NULL DEFAULT 'fiksno' AFTER period");
+    }
+    $res = $col('mesec_od');
+    if ($res && $res->num_rows === 0) {
+        $conn->query("ALTER TABLE finansijski_plan_stavke ADD COLUMN mesec_od TINYINT NOT NULL DEFAULT 1 AFTER iznos");
+    }
+    $res = $col('mesec_do');
+    if ($res && $res->num_rows === 0) {
+        $conn->query("ALTER TABLE finansijski_plan_stavke ADD COLUMN mesec_do TINYINT NOT NULL DEFAULT 12 AFTER mesec_od");
+    }
+    $res = $col('izvor');
+    if ($res && $res->num_rows === 0) {
+        $conn->query("ALTER TABLE finansijski_plan_stavke ADD COLUMN izvor VARCHAR(60) NULL AFTER predefinisana");
+    }
 }
 
 function get_or_create_finansijski_plan($conn, $szId, $godina) {
@@ -256,6 +276,114 @@ function upsert_plan_stavka_by_name($conn, $planId, $tip, $naziv, $grupa, $perio
 }
 
 
+function mesec_naziv($m) {
+    $names = [1=>'Januar',2=>'Februar',3=>'Mart',4=>'April',5=>'Maj',6=>'Jun',7=>'Jul',8=>'Avgust',9=>'Septembar',10=>'Oktobar',11=>'Novembar',12=>'Decembar'];
+    return $names[(int)$m] ?? '';
+}
+
+function mesec_kratko($m) {
+    $names = [1=>'JAN',2=>'FEB',3=>'MAR',4=>'APR',5=>'MAJ',6=>'JUN',7=>'JUL',8=>'AVG',9=>'SEP',10=>'OKT',11=>'NOV',12=>'DEC'];
+    return $names[(int)$m] ?? '';
+}
+
+function normalize_month($m, $default) {
+    $m = (int)$m;
+    if ($m < 1 || $m > 12) { return $default; }
+    return $m;
+}
+
+function stavka_month_count($s) {
+    $period = $s['period'] ?? 'godisnje';
+    if ($period === 'jednokratno') { return 1; }
+    if ($period === 'godisnje') { return 1; }
+    $od = normalize_month($s['mesec_od'] ?? 1, 1);
+    $do = normalize_month($s['mesec_do'] ?? 12, 12);
+    if ($do < $od) { return 0; }
+    return $do - $od + 1;
+}
+
+function stavka_active_in_month($s, $month) {
+    $month = (int)$month;
+    $period = $s['period'] ?? 'godisnje';
+    $od = normalize_month($s['mesec_od'] ?? 1, 1);
+    $do = normalize_month($s['mesec_do'] ?? 12, 12);
+    if ($period === 'godisnje') { return $month === $od; }
+    if ($period === 'jednokratno') { return $month === $od; }
+    return $month >= $od && $month <= $do;
+}
+
+function stavka_osnovica($s, $metrics) {
+    $osnov = $s['osnov'] ?? 'fiksno';
+    if ($osnov === 'poseban_deo') { return (float)($metrics['brojDelova'] ?? 0); }
+    if ($osnov === 'garazno_mesto') { return (float)($metrics['brojGaraza'] ?? 0); }
+    if ($osnov === 'm2_posebni') { return (float)($metrics['povrsinaDelova'] ?? 0); }
+    if ($osnov === 'm2_garaza') { return (float)($metrics['povrsinaGaraza'] ?? 0); }
+    if ($osnov === 'm2_ukupno') { return (float)($metrics['ukupnaPovrsina'] ?? 0); }
+    return 1.0;
+}
+
+function stavka_period_label($s) {
+    $period = $s['period'] ?? 'godisnje';
+    $od = normalize_month($s['mesec_od'] ?? 1, 1);
+    $do = normalize_month($s['mesec_do'] ?? 12, 12);
+    if ($period === 'mesecno') { return mesec_kratko($od) . '–' . mesec_kratko($do); }
+    if ($period === 'jednokratno') { return mesec_kratko($od); }
+    return 'Godišnje (' . mesec_kratko($od) . ')';
+}
+
+function stavka_osnov_label($osnov) {
+    $labels = [
+        'fiksno'=>'fiksno',
+        'poseban_deo'=>'po posebnom delu',
+        'garazno_mesto'=>'po garažnom mestu',
+        'm2_posebni'=>'po m² posebnih delova',
+        'm2_garaza'=>'po m² garaža',
+        'm2_ukupno'=>'po ukupnoj m²',
+    ];
+    return $labels[$osnov] ?? $osnov;
+}
+
+function stavka_total($s, $metrics) {
+    $iznos = (float)($s['iznos'] ?? 0);
+    $osnovica = stavka_osnovica($s, $metrics);
+    $period = $s['period'] ?? 'godisnje';
+    if ($period === 'mesecno') { return $iznos * $osnovica * stavka_month_count($s); }
+    return $iznos * $osnovica;
+}
+
+function stavka_month_value($s, $metrics, $month) {
+    if (!stavka_active_in_month($s, $month)) { return 0; }
+    $iznos = (float)($s['iznos'] ?? 0);
+    return $iznos * stavka_osnovica($s, $metrics);
+}
+
+function stavka_formula($s, $metrics) {
+    $base = stavka_osnovica($s, $metrics);
+    $period = $s['period'] ?? 'godisnje';
+    $months = stavka_month_count($s);
+    $parts = [money_rs($s['iznos'] ?? 0)];
+    $osnov = $s['osnov'] ?? 'fiksno';
+    if ($osnov !== 'fiksno') { $parts[] = '× ' . number_format($base, 2, ',', '.'); }
+    if ($period === 'mesecno') { $parts[] = '× ' . $months . ' mes.'; }
+    return implode(' ', $parts);
+}
+
+function base_priliv_rows($plan, $metrics) {
+    $p = fn($field, $default=0) => isset($plan[$field]) ? (float)$plan[$field] : $default;
+    return [
+        ['naziv'=>'Tekuće održavanje','osnov'=>'poseban_deo','osnovica'=>$metrics['brojDelova'] ?? 0,'iznos'=>$p('tekuce_po_delu'),'meseci'=>12,'total'=>($metrics['brojDelova'] ?? 0)*$p('tekuce_po_delu')*12],
+        ['naziv'=>'Upravljanje','osnov'=>'poseban_deo','osnovica'=>$metrics['brojDelova'] ?? 0,'iznos'=>$p('upravljanje_po_delu'),'meseci'=>12,'total'=>($metrics['brojDelova'] ?? 0)*$p('upravljanje_po_delu')*12],
+        ['naziv'=>'Tekuće održavanje garaža','osnov'=>'garazno_mesto','osnovica'=>$metrics['brojGaraza'] ?? 0,'iznos'=>$p('garaza_po_mestu'),'meseci'=>12,'total'=>($metrics['brojGaraza'] ?? 0)*$p('garaza_po_mestu')*12],
+        ['naziv'=>'Investiciono održavanje','osnov'=>'m2_ukupno','osnovica'=>$metrics['ukupnaPovrsina'] ?? 0,'iznos'=>$p('investiciono_po_m2'),'meseci'=>12,'total'=>($metrics['ukupnaPovrsina'] ?? 0)*$p('investiciono_po_m2')*12],
+    ];
+}
+
+function base_priliv_month_value($plan, $metrics, $month) {
+    $sum = 0;
+    foreach (base_priliv_rows($plan, $metrics) as $r) { $sum += (float)$r['osnovica'] * (float)$r['iznos']; }
+    return $sum;
+}
+
 function finansijski_plan_summary($conn, $szId, $godina) {
     ensure_finansijski_plan_schema($conn);
     $z = db_one($conn, "SELECT * FROM stambene_zajednice WHERE id=?", 'i', [(int)$szId]);
@@ -263,12 +391,13 @@ function finansijski_plan_summary($conn, $szId, $godina) {
     $plan = get_or_create_finansijski_plan($conn, (int)$szId, (int)$godina);
     $plan = sync_finansijski_plan_from_v1_budzet($conn, $plan, $z, (int)$godina);
 
-    $stavke = db_all($conn, "SELECT * FROM finansijski_plan_stavke WHERE plan_id=? AND aktivna=1", 'i', [(int)$plan['id']]);
+    $stavke = db_all($conn, "SELECT * FROM finansijski_plan_stavke WHERE plan_id=? AND aktivna=1 ORDER BY tip, predefinisana DESC, grupa, naziv", 'i', [(int)$plan['id']]);
     $brojDelova = get_building_metric($z, $conn, ['broj_posebnih_delova','broj_delova','broj_stanova'], 0);
     $brojGaraza = get_building_metric($z, $conn, ['broj_garaznih_mesta','broj_garaza'], 0);
     $povrsinaDelova = get_building_metric($z, $conn, ['ukupna_povrsina_posebnih_delova','povrsina_posebnih_delova','ukupna_povrsina'], 0);
     $povrsinaGaraza = get_building_metric($z, $conn, ['ukupna_povrsina_garaznih_mesta','povrsina_garaznih_mesta'], 0);
     $ukupnaPovrsina = $povrsinaDelova + $povrsinaGaraza;
+    $metrics = compact('brojDelova','brojGaraza','povrsinaDelova','povrsinaGaraza','ukupnaPovrsina');
 
     $stanjeCol = first_existing_column($conn, 'stambene_zajednice', ['pocetno_stanje','pocetno_stanje_racuna','stanje_racuna'], null);
     $pocetnoStanje = $stanjeCol ? (float)($z[$stanjeCol] ?? 0) : 0;
@@ -279,47 +408,62 @@ function finansijski_plan_summary($conn, $szId, $godina) {
         }
     }
 
-    $p = fn($field, $default=0) => isset($plan[$field]) ? (float)$plan[$field] : $default;
-    $analitikaPriliva = [
-        ['Tekuće održavanje', 'po posebnom delu', $brojDelova, $p('tekuce_po_delu'), 12],
-        ['Upravljanje', 'po posebnom delu', $brojDelova, $p('upravljanje_po_delu'), 12],
-        ['Tekuće održavanje garaža', 'po garažnom mestu', $brojGaraza, $p('garaza_po_mestu'), 12],
-        ['Investiciono održavanje', 'po m² posebnih delova i garaža', $ukupnaPovrsina, $p('investiciono_po_m2'), 12],
-    ];
-
+    $basePrilivi = base_priliv_rows($plan, $metrics);
     $planiraniPriliv = 0;
-    foreach ($analitikaPriliva as $a) { $planiraniPriliv += $a[2] * $a[3] * $a[4]; }
+    foreach ($basePrilivi as $r) { $planiraniPriliv += (float)$r['total']; }
+
     $dodatniPrilivi = 0;
     $planiraniOdlivi = 0;
     foreach ($stavke as $s) {
-        $godisnje = period_to_yearly($s['period'] ?? 'godisnje', $s['iznos'] ?? 0);
-        if (($s['tip'] ?? '') === 'priliv') { $dodatniPrilivi += $godisnje; }
-        if (($s['tip'] ?? '') === 'odliv') { $planiraniOdlivi += $godisnje; }
+        $total = stavka_total($s, $metrics);
+        if (($s['tip'] ?? '') === 'priliv') { $dodatniPrilivi += $total; }
+        if (($s['tip'] ?? '') === 'odliv') { $planiraniOdlivi += $total; }
     }
     $planiraniPriliv += $dodatniPrilivi;
-    $ocekivaniPriliv = $planiraniPriliv * ($p('stepen_naplate', 100) / 100);
-    $nepredvidjeni = $planiraniOdlivi * ($p('nepredvidjeni_proc', 0) / 100);
+    $stepenNaplate = isset($plan['stepen_naplate']) ? (float)$plan['stepen_naplate'] : 100;
+    $ocekivaniPriliv = $planiraniPriliv * ($stepenNaplate / 100);
+    $nepredProc = isset($plan['nepredvidjeni_proc']) ? (float)$plan['nepredvidjeni_proc'] : 0;
+    $nepredvidjeni = $planiraniOdlivi * ($nepredProc / 100);
     $ukupniOdlivi = $planiraniOdlivi + $nepredvidjeni;
     $saldoPlana = $ocekivaniPriliv - $ukupniOdlivi;
     $ocekivanoKrajGodine = $pocetnoStanje + $saldoPlana;
 
-    $today = new DateTime('today');
-    $start = new DateTime($godina . '-01-01');
-    $end = new DateTime($godina . '-12-31');
-    if ((int)$today->format('Y') < (int)$godina) { $ratio = 0; }
-    elseif ((int)$today->format('Y') > (int)$godina) { $ratio = 1; }
-    else {
-        $daysTotal = (int)$start->diff($end)->days + 1;
-        $daysPassed = (int)$start->diff($today)->days + 1;
-        $ratio = max(0, min(1, $daysPassed / $daysTotal));
+    $monthly = [];
+    for ($m=1; $m<=12; $m++) {
+        $priliv = base_priliv_month_value($plan, $metrics, $m);
+        $odliv = 0;
+        foreach ($stavke as $s) {
+            $value = stavka_month_value($s, $metrics, $m);
+            if (($s['tip'] ?? '') === 'priliv') { $priliv += $value; }
+            if (($s['tip'] ?? '') === 'odliv') { $odliv += $value; }
+        }
+        $prilivOcekivani = $priliv * ($stepenNaplate / 100);
+        // Nepredviđeni troškovi se prikazuju proporcionalno na svaki mesec u kome ima planiranih odliva.
+        $nepredMesec = $odliv * ($nepredProc / 100);
+        $monthly[$m] = [
+            'mesec'=>$m,
+            'naziv'=>mesec_kratko($m),
+            'planirani_priliv'=>$priliv,
+            'ocekivani_priliv'=>$prilivOcekivani,
+            'odliv'=>$odliv + $nepredMesec,
+            'saldo'=>$prilivOcekivani - ($odliv + $nepredMesec),
+        ];
     }
-    $planiranoStanjeDanas = $pocetnoStanje + (($ocekivaniPriliv - $ukupniOdlivi) * $ratio);
+
+    $today = new DateTime('today');
+    $currentMonth = (int)$today->format('n');
+    if ((int)$today->format('Y') < (int)$godina) { $untilMonth = 0; }
+    elseif ((int)$today->format('Y') > (int)$godina) { $untilMonth = 12; }
+    else { $untilMonth = $currentMonth; }
+    $planiranoStanjeDanas = $pocetnoStanje;
+    for ($m=1; $m<=$untilMonth; $m++) { $planiranoStanjeDanas += $monthly[$m]['saldo']; }
 
     return [
         'zgrada' => $z,
         'plan' => $plan,
         'stavke' => $stavke,
-        'analitikaPriliva' => $analitikaPriliva,
+        'basePrilivi' => $basePrilivi,
+        'metrics' => $metrics,
         'brojDelova' => $brojDelova,
         'brojGaraza' => $brojGaraza,
         'povrsinaDelova' => $povrsinaDelova,
@@ -328,12 +472,14 @@ function finansijski_plan_summary($conn, $szId, $godina) {
         'pocetnoStanje' => $pocetnoStanje,
         'planiraniPriliv' => $planiraniPriliv,
         'ocekivaniPriliv' => $ocekivaniPriliv,
+        'dodatniPrilivi' => $dodatniPrilivi,
         'planiraniOdlivi' => $planiraniOdlivi,
         'nepredvidjeni' => $nepredvidjeni,
         'ukupniOdlivi' => $ukupniOdlivi,
         'saldoPlana' => $saldoPlana,
         'ocekivanoKrajGodine' => $ocekivanoKrajGodine,
         'planiranoStanjeDanas' => $planiranoStanjeDanas,
-        'procenatGodine' => $ratio,
+        'monthly' => $monthly,
+        'untilMonth' => $untilMonth,
     ];
 }

@@ -25,3 +25,16 @@ a{text-decoration:none;color:inherit}.app-shell{display:grid;grid-template-colum
 @media (max-width: 680px) { .finance-summary-grid { grid-template-columns: 1fr; } }
 
 .stat-plan-today strong{color:#1d4ed8}.stat-plan-today small{color:#64748b;line-height:1.35}.finance-summary-grid > div{min-height:118px}.summary-label{display:block;min-height:36px;color:#667085;font-weight:700;line-height:1.25}.compact-summary{grid-template-columns:repeat(3,minmax(0,1fr))}.compact-summary > div{min-height:auto}.compact-summary .summary-label{min-height:0}@media(max-width:950px){.compact-summary{grid-template-columns:1fr}.summary-label{min-height:auto}}
+
+/* v2.1 finansijski plan po mesecima */
+.fixed-labels .summary-label{min-height:36px;display:flex;align-items:flex-start}
+.month-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:12px}
+.month-card{border:1px solid var(--border);border-radius:16px;background:#fff;padding:14px;display:flex;flex-direction:column;gap:6px;min-height:128px}
+.month-card strong{font-size:15px;color:var(--text)}
+.month-card span{font-size:12px;color:var(--muted);line-height:1.35}
+.month-card b{font-size:14px;margin-top:auto}
+.month-good{border-color:#bbf7d0;background:#f0fdf4}
+.month-bad{border-color:#fecaca;background:#fef2f2}
+.notice{background:#eff6ff;border:1px solid #bfdbfe;color:#1e3a8a;border-radius:14px;padding:12px 14px;font-size:13px}
+@media(max-width:1100px){.month-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:640px){.month-grid{grid-template-columns:1fr}}
