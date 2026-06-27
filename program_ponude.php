@@ -3,13 +3,6 @@ include "config.php";
 
 $program_id = (int)($_GET['program_id'] ?? $_POST['program_id'] ?? 0);
 
-if ($program_id <= 0) {
-    die("Program održavanja nije prosleđen.");
-}
-
-/* =========================
-   UČITAJ STAVKU PROGRAMA
-========================= */
 $programResult = $conn->query("
     SELECT po.*, sz.naziv AS sz_naziv, sz.adresa AS sz_adresa
     FROM program_odrzavanja po
@@ -22,37 +15,36 @@ if (!$programResult || $programResult->num_rows == 0) {
 }
 
 $program = $programResult->fetch_assoc();
-
 $sz_id = (int)$program['sz_id'];
 $kategorija = trim($program['kategorija'] ?? '');
 $kategorijaSql = $conn->real_escape_string($kategorija);
 
-/* =========================
-   DODAJ PONUDU PROGRAMU
-========================= */
+/* DODAJ PONUDU PROGRAMU */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['dodaj_ponudu'])) {
     $ponuda_id = (int)($_POST['ponuda_id'] ?? 0);
 
     if ($ponuda_id > 0 && $kategorija !== '') {
-
         /*
-           Zaštita:
-           - ponuda mora biti aktivna
-           - ponuda mora biti iz iste kategorije kao stavka programa
-           - ponuda mora biti za istu zgradu ili opšta ponuda bez sz_id
+            Nova provera:
+            - ponuda mora biti aktivna;
+            - ponuda mora biti vezana za izvođača;
+            - taj izvođač mora imati kategoriju koja odgovara stavki programa;
+            - ponuda mora biti za istu zgradu ili opšta ponuda bez sz_id.
         */
         $dozvoljena = $conn->query("
-            SELECT id
-            FROM ponude
-            WHERE id = $ponuda_id
-              AND aktivna = 1
-              AND kategorija = '$kategorijaSql'
-              AND (sz_id = $sz_id OR sz_id IS NULL OR sz_id = 0)
+            SELECT p.id
+            FROM ponude p
+            JOIN izvodjac_kategorije ik ON ik.izvodjac_id = p.izvodjac_id
+            JOIN kategorije_radova kr ON kr.id = ik.kategorija_id
+            WHERE p.id = $ponuda_id
+              AND p.aktivna = 1
+              AND kr.naziv = '$kategorijaSql'
+              AND (p.sz_id = $sz_id OR p.sz_id IS NULL OR p.sz_id = 0)
             LIMIT 1
         ");
 
         if (!$dozvoljena || $dozvoljena->num_rows == 0) {
-            die("Greška: izabrana ponuda ne odgovara kategoriji ove stavke programa održavanja.");
+            die("Greška: izabrana ponuda nije od izvođača koji obavlja ovu kategoriju radova.");
         }
 
         $postoji = $conn->query("
@@ -75,76 +67,54 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['dodaj_ponudu'])) {
     exit;
 }
 
-/* =========================
-   OZNAČI IZABRANU PONUDU
-========================= */
+/* OZNAČI IZABRANU PONUDU */
 if (isset($_GET['izaberi'])) {
     $veza_id = (int)$_GET['izaberi'];
-
-    $conn->query("
-        UPDATE program_odrzavanje_ponude
-        SET izabrana = 0
-        WHERE program_id = $program_id
-    ");
-
-    $conn->query("
-        UPDATE program_odrzavanje_ponude
-        SET izabrana = 1
-        WHERE id = $veza_id
-          AND program_id = $program_id
-    ");
-
+    $conn->query("UPDATE program_odrzavanje_ponude SET izabrana = 0 WHERE program_id = $program_id");
+    $conn->query("UPDATE program_odrzavanje_ponude SET izabrana = 1 WHERE id = $veza_id AND program_id = $program_id");
     header("Location: program_ponude.php?program_id=$program_id");
     exit;
 }
 
-/* =========================
-   UKLONI PONUDU SA PROGRAMA
-========================= */
+/* UKLONI PONUDU SA PROGRAMA */
 if (isset($_GET['ukloni'])) {
     $veza_id = (int)$_GET['ukloni'];
-
-    $conn->query("
-        DELETE FROM program_odrzavanje_ponude
-        WHERE id = $veza_id
-          AND program_id = $program_id
-    ");
-
+    $conn->query("DELETE FROM program_odrzavanje_ponude WHERE id = $veza_id AND program_id = $program_id");
     header("Location: program_ponude.php?program_id=$program_id");
     exit;
 }
 
-/* =========================
-   POVEZANE PONUDE
-========================= */
 $povezanePonude = $conn->query("
     SELECT pop.id AS veza_id,
            pop.izabrana,
            p.id AS ponuda_id,
            p.naziv,
-           p.dobavljac,
+           COALESCE(i.naziv, p.dobavljac) AS izvodjac,
            p.datum_ponude,
            p.vazi_do,
            p.iznos,
            p.opis,
-           p.kategorija
+           GROUP_CONCAT(DISTINCT kr.naziv ORDER BY kr.naziv SEPARATOR ', ') AS kategorije_izvodjaca
     FROM program_odrzavanje_ponude pop
     JOIN ponude p ON p.id = pop.ponuda_id
+    LEFT JOIN izvodjaci i ON i.id = p.izvodjac_id
+    LEFT JOIN izvodjac_kategorije ik ON ik.izvodjac_id = i.id
+    LEFT JOIN kategorije_radova kr ON kr.id = ik.kategorija_id
     WHERE pop.program_id = $program_id
+    GROUP BY pop.id, p.id
     ORDER BY pop.izabrana DESC, p.iznos ASC, p.datum_ponude DESC
 ");
 
-/* =========================
-   AKTIVNE PONUDE ISTE KATEGORIJE
-========================= */
 $svePonude = false;
-
 if ($kategorija !== '') {
     $svePonude = $conn->query("
-        SELECT p.*
+        SELECT p.*, COALESCE(i.naziv, p.dobavljac) AS izvodjac
         FROM ponude p
+        JOIN izvodjaci i ON i.id = p.izvodjac_id
+        JOIN izvodjac_kategorije ik ON ik.izvodjac_id = i.id
+        JOIN kategorije_radova kr ON kr.id = ik.kategorija_id
         WHERE p.aktivna = 1
-          AND p.kategorija = '$kategorijaSql'
+          AND kr.naziv = '$kategorijaSql'
           AND (p.sz_id = $sz_id OR p.sz_id IS NULL OR p.sz_id = 0)
           AND NOT EXISTS (
               SELECT 1
@@ -156,7 +126,6 @@ if ($kategorija !== '') {
     ");
 }
 ?>
-
 <!DOCTYPE html>
 <html lang="sr">
 <head>
@@ -165,131 +134,87 @@ if ($kategorija !== '') {
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
+<?php include "header.php"; ?>
 
 <div class="container">
-
     <h1>Ponude za aktivnost</h1>
 
-    <p>
-        <strong><?= htmlspecialchars($program['sz_naziv']) ?></strong><br>
-        <?= htmlspecialchars($program['sz_adresa']) ?>
-    </p>
-
     <h2><?= htmlspecialchars($program['aktivnost']) ?></h2>
-
-    <p>
-        <strong>Kategorija:</strong>
-        <?= $kategorija !== '' ? htmlspecialchars($kategorija) : '<span style="color:red;">Nije upisana</span>' ?><br>
-
-        <strong>Procena troška:</strong>
-        <?= number_format((float)$program['procenjeni_trosak'], 2, ',', '.') ?> RSD<br>
-
-        <strong>Status:</strong>
-        <?= $program['zavrsena'] ? 'Završeno' : 'Planirano' ?>
-    </p>
+    <p><strong>Kategorija:</strong> <?= $kategorija !== '' ? htmlspecialchars($kategorija) : 'Nije upisana' ?></p>
+    <p><strong>Procena troška:</strong> <?= number_format((float)($program['procena_troska'] ?? 0), 2, ',', '.') ?> RSD</p>
+    <p><strong>Status:</strong> <?= htmlspecialchars($program['status'] ?? '') ?></p>
 
     <?php if (!empty($program['napomena'])): ?>
-        <p><strong>Napomena:</strong><br><?= nl2br(htmlspecialchars($program['napomena'])) ?></p>
+        <p><strong>Napomena:</strong> <?= nl2br(htmlspecialchars($program['napomena'])) ?></p>
     <?php endif; ?>
 
     <h2>Povezane ponude</h2>
-
+    <div class="table-wrap">
     <table>
         <tr>
             <th>Ponuda</th>
-            <th>Kategorija</th>
-            <th>Dobavljač</th>
+            <th>Izvođač</th>
+            <th>Kategorije izvođača</th>
             <th>Datum</th>
             <th>Važi do</th>
             <th>Iznos</th>
             <th>Status</th>
             <th>Akcija</th>
         </tr>
-
         <?php if ($povezanePonude && $povezanePonude->num_rows > 0): ?>
-            <?php while ($ponuda = $povezanePonude->fetch_assoc()): ?>
+            <?php while($p = $povezanePonude->fetch_assoc()): ?>
                 <tr>
+                    <td><?= htmlspecialchars($p['naziv']) ?></td>
+                    <td><?= htmlspecialchars($p['izvodjac'] ?? '') ?></td>
+                    <td><?= htmlspecialchars($p['kategorije_izvodjaca'] ?? '') ?></td>
+                    <td><?= htmlspecialchars($p['datum_ponude'] ?? '') ?></td>
+                    <td><?= htmlspecialchars($p['vazi_do'] ?? '') ?></td>
+                    <td><?= number_format((float)($p['iznos'] ?? 0), 2, ',', '.') ?> RSD</td>
+                    <td><?= ((int)$p['izabrana'] === 1) ? 'Izabrana' : 'Povezana' ?></td>
                     <td>
-                        <strong><?= htmlspecialchars($ponuda['naziv']) ?></strong>
-                        <?php if (!empty($ponuda['opis'])): ?>
-                            <br><small><?= nl2br(htmlspecialchars($ponuda['opis'])) ?></small>
-                        <?php endif; ?>
-                    </td>
-                    <td><?= htmlspecialchars($ponuda['kategorija']) ?></td>
-                    <td><?= htmlspecialchars($ponuda['dobavljac']) ?></td>
-                    <td><?= htmlspecialchars($ponuda['datum_ponude']) ?></td>
-                    <td><?= htmlspecialchars($ponuda['vazi_do']) ?></td>
-                    <td>
-                        <?= $ponuda['iznos'] !== null
-                            ? number_format((float)$ponuda['iznos'], 2, ',', '.') . ' RSD'
-                            : '-' ?>
-                    </td>
-                    <td><?= $ponuda['izabrana'] ? '<strong>Izabrana</strong>' : 'Povezana' ?></td>
-                    <td>
-                        <?php if (!$ponuda['izabrana']): ?>
-                            <a class="btn" href="program_ponude.php?program_id=<?= $program_id ?>&izaberi=<?= $ponuda['veza_id'] ?>">
-                                Izaberi
-                            </a>
-                        <?php endif; ?>
-
-                        <a class="btn" href="program_ponude.php?program_id=<?= $program_id ?>&ukloni=<?= $ponuda['veza_id'] ?>"
-                           onclick="return confirm('Ukloniti ovu ponudu iz aktivnosti?')">
-                            Ukloni
-                        </a>
+                        <div class="action-cell">
+                            <?php if ((int)$p['izabrana'] !== 1): ?>
+                                <a class="btn btn-small" href="program_ponude.php?program_id=<?= $program_id ?>&izaberi=<?= (int)$p['veza_id'] ?>">✅ Izaberi</a>
+                            <?php endif; ?>
+                            <a class="btn btn-small btn-danger" href="program_ponude.php?program_id=<?= $program_id ?>&ukloni=<?= (int)$p['veza_id'] ?>" onclick="return confirm('Ukloniti ponudu sa ove stavke programa?')">🗑️ Ukloni</a>
+                        </div>
                     </td>
                 </tr>
             <?php endwhile; ?>
         <?php else: ?>
-            <tr>
-                <td colspan="8">Nema povezanih ponuda.</td>
-            </tr>
+            <tr><td colspan="8">Nema povezanih ponuda.</td></tr>
         <?php endif; ?>
     </table>
+    </div>
 
     <h2>Dodaj postojeću ponudu</h2>
-
     <?php if ($kategorija === ''): ?>
-
-        <p style="color:red;">
-            Ova stavka programa nema upisanu kategoriju, pa nije moguće povezati ponudu.
-            Prvo upiši kategoriju u tabeli <strong>program_odrzavanja</strong>.
-        </p>
-
+        <p>Ova stavka programa nema upisanu kategoriju, pa nije moguće povezati ponudu.</p>
     <?php else: ?>
-
-        <p>
-            <small>
-                Prikazuju se samo aktivne ponude iz kategorije
-                <strong><?= htmlspecialchars($kategorija) ?></strong>.
-            </small>
-        </p>
-
-        <form method="post">
+        <p>Prikazuju se samo aktivne ponude izvođača koji imaju kategoriju: <strong><?= htmlspecialchars($kategorija) ?></strong>.</p>
+        <form method="POST">
             <input type="hidden" name="program_id" value="<?= $program_id ?>">
+            <input type="hidden" name="dodaj_ponudu" value="1">
 
             <select name="ponuda_id" required>
                 <option value="">-- Izaberi ponudu --</option>
-
                 <?php if ($svePonude && $svePonude->num_rows > 0): ?>
-                    <?php while ($p = $svePonude->fetch_assoc()): ?>
-                        <option value="<?= $p['id'] ?>">
-                            <?= htmlspecialchars($p['naziv']) ?>
-                            <?= !empty($p['dobavljac']) ? ' - ' . htmlspecialchars($p['dobavljac']) : '' ?>
-                            <?= $p['iznos'] !== null ? ' - ' . number_format((float)$p['iznos'], 2, ',', '.') . ' RSD' : '' ?>
+                    <?php while($p = $svePonude->fetch_assoc()): ?>
+                        <option value="<?= (int)$p['id'] ?>">
+                            <?= htmlspecialchars($p['naziv']) ?> — <?= htmlspecialchars($p['izvodjac'] ?? '') ?>
+                            <?php if (!empty($p['datum_ponude'])): ?>
+                                (<?= htmlspecialchars($p['datum_ponude']) ?>)
+                            <?php endif; ?>
                         </option>
                     <?php endwhile; ?>
                 <?php endif; ?>
             </select>
 
-            <button type="submit" name="dodaj_ponudu" class="btn">Dodaj ponudu</button>
+            <button class="btn" type="submit">➕ Dodaj ponudu</button>
         </form>
-
     <?php endif; ?>
 
-    <br>
-    <a href="program_odrzavanja.php?sz_id=<?= $sz_id ?>">← Nazad na program održavanja</a>
-
+    <p><a class="btn btn-secondary" href="program_odrzavanja.php?sz_id=<?= $sz_id ?>">⬅ Nazad na program održavanja</a></p>
 </div>
-
 </body>
 </html>
