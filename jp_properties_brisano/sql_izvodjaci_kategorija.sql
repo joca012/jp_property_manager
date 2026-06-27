@@ -1,0 +1,2 @@
+ALTER TABLE izvodjaci
+ADD COLUMN kategorija VARCHAR(100) NULL AFTER naziv;
