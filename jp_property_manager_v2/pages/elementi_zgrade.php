@@ -1,8 +1,8 @@
 <?php
 $szId = get_int('sz_id');
 
-$title = 'Elementi zgrade';
-$subtitle = 'Popis elemenata zgrade za automatsko formiranje programa održavanja.';
+$title = 'Uređivanje popisa zgrade';
+$subtitle = 'Ček-lista elemenata zgrade za terenski popis i automatsko formiranje programa održavanja.';
 
 if ($szId <= 0) {
     die('Nije izabrana stambena zajednica.');
@@ -52,16 +52,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['snimi_popis'])) {
                 $stmt->bind_param('iiis', $szId, $elementId, $kolicina, $napomena);
                 $stmt->execute();
             }
-        } else {
-            if ($red) {
-                $stmt = $conn->prepare("
-                    UPDATE oprema_zgrade
-                    SET aktivna=0
-                    WHERE id=?
-                ");
-                $stmt->bind_param('i', $red['id']);
-                $stmt->execute();
-            }
+        } elseif ($red) {
+            $stmt = $conn->prepare("
+                UPDATE oprema_zgrade
+                SET aktivna=0
+                WHERE id=?
+            ");
+            $stmt->bind_param('i', $red['id']);
+            $stmt->execute();
         }
     }
 
@@ -71,8 +69,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['snimi_popis'])) {
 /* PODACI */
 $elementi = db_all(
     $conn,
-    "SELECT * FROM sifarnik_elemenata 
-     WHERE aktivan=1 
+    "SELECT * FROM sifarnik_elemenata
+     WHERE aktivan=1
      ORDER BY kategorija, naziv"
 );
 
@@ -100,9 +98,16 @@ require __DIR__ . '/../includes/header.php';
 <section class="card">
     <div class="toolbar">
         <h2>Popis elemenata zgrade</h2>
-        <button class="btn btn-primary" form="popis-form" type="submit">
-            Sačuvaj popis
-        </button>
+
+        <div class="actions">
+            <a class="btn btn-light" href="index.php?page=elementi_zgrade_pregled&sz_id=<?= $szId ?>">
+                Pregled elemenata
+            </a>
+
+            <button class="btn btn-primary" form="popis-form" type="submit">
+                Sačuvaj popis
+            </button>
+        </div>
     </div>
 
     <form method="post" id="popis-form">
@@ -116,6 +121,7 @@ require __DIR__ . '/../includes/header.php';
             $aktivno = $red && ((int)($red['aktivna'] ?? 1) === 1);
             $kolicina = $red['kolicina'] ?? 1;
             $napomena = $red['napomena'] ?? '';
+            $koristiKolicinu = (int)($el['koristi_kolicinu'] ?? 1) === 1;
 
             if ($trenutnaKategorija !== $el['kategorija']):
                 if ($trenutnaKategorija !== null) {
@@ -127,7 +133,7 @@ require __DIR__ . '/../includes/header.php';
                 <div class="grid grid-1">
             <?php endif; ?>
 
-            <article class="card card-muted" style="display:grid; grid-template-columns: 40px 1fr 150px 1fr; gap:12px; align-items:center;">
+            <article class="card card-muted" style="display:grid; grid-template-columns: 40px 1fr 170px 1.4fr; gap:12px; align-items:center;">
                 <div>
                     <input type="checkbox"
                            name="element[<?= $elementId ?>]"
@@ -140,28 +146,28 @@ require __DIR__ . '/../includes/header.php';
                 </div>
 
                 <div>
-    <?php if ((int)($el['koristi_kolicinu'] ?? 1) === 1): ?>
-        <div style="display:flex; gap:5px; align-items:center;">
-            <button type="button" class="btn btn-light btn-sm qty-minus">−</button>
-            <input type="number"
-                   name="kolicina[<?= $elementId ?>]"
-                   value="<?= e($kolicina) ?>"
-                   min="1"
-                   step="1"
-                   style="width:70px; text-align:center;">
-            <button type="button" class="btn btn-light btn-sm qty-plus">+</button>
-        </div>
-    <?php else: ?>
-        <input type="hidden" name="kolicina[<?= $elementId ?>]" value="1">
-        <span class="muted">bez količine</span>
-    <?php endif; ?>
-</div>
+                    <?php if ($koristiKolicinu): ?>
+                        <div style="display:flex; gap:5px; align-items:center;">
+                            <button type="button" class="btn btn-light btn-sm qty-minus">−</button>
+                            <input type="number"
+                                   name="kolicina[<?= $elementId ?>]"
+                                   value="<?= e($kolicina) ?>"
+                                   min="1"
+                                   step="1"
+                                   style="width:70px; text-align:center;">
+                            <button type="button" class="btn btn-light btn-sm qty-plus">+</button>
+                        </div>
+                    <?php else: ?>
+                        <input type="hidden" name="kolicina[<?= $elementId ?>]" value="1">
+                        <span class="muted">bez količine</span>
+                    <?php endif; ?>
+                </div>
 
                 <div>
                     <input type="text"
                            name="napomena[<?= $elementId ?>]"
                            value="<?= e($napomena) ?>"
-                           placeholder="Napomena"
+                           placeholder="Napomena / opis"
                            style="width:100%;">
                 </div>
             </article>
@@ -172,8 +178,12 @@ require __DIR__ . '/../includes/header.php';
             </div>
         <?php endif; ?>
 
-        <div style="margin-top:25px;">
+        <div style="margin-top:25px; display:flex; gap:10px;">
             <button class="btn btn-primary" type="submit">Sačuvaj popis</button>
+
+            <a class="btn btn-light" href="index.php?page=elementi_zgrade_pregled&sz_id=<?= $szId ?>">
+                Pregled elemenata
+            </a>
         </div>
     </form>
 </section>

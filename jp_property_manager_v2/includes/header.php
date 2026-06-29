@@ -27,8 +27,8 @@ $szQuery = $szId > 0 ? '&sz_id=' . $szId : '';
                 <div class="nav-section">Izabrana zgrada</div>
                 <a class="<?= active_page('zajednica', $currentPage) ?>" href="index.php?page=zajednica&sz_id=<?= $szId ?>">🪪 Kartica</a>
                 <a class="<?= active_page('finansijski_plan', $currentPage) ?: active_page('budzet', $currentPage) ?>" href="index.php?page=finansijski_plan&sz_id=<?= $szId ?>">💰 Finansijski plan</a>
-				<a class="<?= active_page('elementi_zgrade', $currentPage) ?>" href="index.php?page=elementi_zgrade&sz_id=<?= $szId ?>">🔧 Elementi zgrade</a>
-<a class="<?= active_page('program', $currentPage) ?>" href="index.php?page=program&sz_id=<?= $szId ?>">📅 Program</a>
+                <a class="<?= active_page('elementi_zgrade', $currentPage) ?: active_page('elementi_zgrade_pregled', $currentPage) ?>" href="index.php?page=elementi_zgrade_pregled&sz_id=<?= $szId ?>">📋 Popis zgrade</a>
+                <a class="<?= active_page('program', $currentPage) ?>" href="index.php?page=program&sz_id=<?= $szId ?>">📅 Program</a>
                 <a class="<?= active_page('kvarovi', $currentPage) ?>" href="index.php?page=kvarovi&sz_id=<?= $szId ?>">⚠️ Kvarovi</a>
                 <a class="<?= active_page('dokumentacija', $currentPage) ?>" href="index.php?page=dokumentacija&sz_id=<?= $szId ?>">📁 Dokumentacija</a>
                 <a class="<?= active_page('izvestaji', $currentPage) ?>" href="index.php?page=izvestaji&sz_id=<?= $szId ?>">📈 Izveštaji</a>
