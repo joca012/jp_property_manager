@@ -1,0 +1,8 @@
+ALTER TABLE finansijski_planovi
+  ADD COLUMN IF NOT EXISTS investiciono_garaza_po_m2 DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER investiciono_po_m2;
+
+ALTER TABLE finansijski_plan_stavke
+  ADD COLUMN IF NOT EXISTS osnov VARCHAR(40) NOT NULL DEFAULT 'fiksno' AFTER period,
+  ADD COLUMN IF NOT EXISTS mesec_od TINYINT NOT NULL DEFAULT 1 AFTER iznos,
+  ADD COLUMN IF NOT EXISTS mesec_do TINYINT NOT NULL DEFAULT 12 AFTER mesec_od,
+  ADD COLUMN IF NOT EXISTS izvor VARCHAR(60) NULL AFTER predefinisana;

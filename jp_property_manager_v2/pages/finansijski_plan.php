@@ -15,11 +15,12 @@ if ($z && $_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 
     $upravljanje = (float)str_replace(',', '.', post_value('upravljanje_po_delu', 0));
     $garaza = (float)str_replace(',', '.', post_value('garaza_po_mestu', 0));
     $invest = (float)str_replace(',', '.', post_value('investiciono_po_m2', 0));
+    $investGaraza = (float)str_replace(',', '.', post_value('investiciono_garaza_po_m2', 0));
     $naplata = (float)str_replace(',', '.', post_value('stepen_naplate', 100));
     $nepred = (float)str_replace(',', '.', post_value('nepredvidjeni_proc', 0));
     $napomena = trim(post_value('napomena', ''));
-    $stmt = $conn->prepare("UPDATE finansijski_planovi SET tekuce_po_delu=?, upravljanje_po_delu=?, garaza_po_mestu=?, investiciono_po_m2=?, stepen_naplate=?, nepredvidjeni_proc=?, napomena=? WHERE id=?");
-    $stmt->bind_param('ddddddsi', $tekuce, $upravljanje, $garaza, $invest, $naplata, $nepred, $napomena, $plan['id']);
+    $stmt = $conn->prepare("UPDATE finansijski_planovi SET tekuce_po_delu=?, upravljanje_po_delu=?, garaza_po_mestu=?, investiciono_po_m2=?, investiciono_garaza_po_m2=?, stepen_naplate=?, nepredvidjeni_proc=?, napomena=? WHERE id=?");
+    $stmt->bind_param('dddddddsi', $tekuce, $upravljanje, $garaza, $invest, $investGaraza, $naplata, $nepred, $napomena, $plan['id']);
     $stmt->execute();
     redirect_to("index.php?page=finansijski_plan&sz_id=$szId&godina=$godina");
 }
@@ -92,7 +93,8 @@ require __DIR__ . '/../includes/header.php';
             <div class="field"><label>Tekuće održavanje / poseban deo</label><input type="number" step="0.01" name="tekuce_po_delu" value="<?= e($p('tekuce_po_delu')) ?>"></div>
             <div class="field"><label>Upravljanje / poseban deo</label><input type="number" step="0.01" name="upravljanje_po_delu" value="<?= e($p('upravljanje_po_delu')) ?>"></div>
             <div class="field"><label>Tekuće održavanje garaža / mesto</label><input type="number" step="0.01" name="garaza_po_mestu" value="<?= e($p('garaza_po_mestu')) ?>"></div>
-            <div class="field"><label>Investiciono održavanje / m² ukupno</label><input type="number" step="0.01" name="investiciono_po_m2" value="<?= e($p('investiciono_po_m2')) ?>"></div>
+            <div class="field"><label>Investiciono održavanje / m² posebnih delova</label><input type="number" step="0.01" name="investiciono_po_m2" value="<?= e($p('investiciono_po_m2')) ?>"></div>
+            <div class="field"><label>Investiciono održavanje / m² garažnog prostora</label><input type="number" step="0.01" name="investiciono_garaza_po_m2" value="<?= e($p('investiciono_garaza_po_m2')) ?>"></div>
             <div class="field"><label>Planirani stepen naplate (%)</label><input type="number" step="0.01" name="stepen_naplate" value="<?= e($p('stepen_naplate',100)) ?>"></div>
             <div class="field"><label>Nepredviđeni troškovi (%)</label><input type="number" step="0.01" name="nepredvidjeni_proc" value="<?= e($p('nepredvidjeni_proc')) ?>"></div>
             <div class="field full"><label>Napomena</label><textarea name="napomena" rows="2"><?= e($plan['napomena'] ?? '') ?></textarea></div>

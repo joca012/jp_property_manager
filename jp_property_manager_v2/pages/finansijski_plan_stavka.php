@@ -9,7 +9,7 @@ $stavka = ($id && $plan) ? db_one($conn, "SELECT * FROM finansijski_plan_stavke 
 $tip = $stavka['tip'] ?? ($_GET['tip'] ?? 'odliv');
 if (!in_array($tip, ['priliv','odliv'], true)) { $tip = 'odliv'; }
 $title = $id ? 'Izmena stavke' : 'Nova stavka';
-$subtitle = $z ? (($tip === 'priliv' ? 'Stavka planiranog priliva' : 'Stavka planiranog odliva') . ' — ' . ($z['naziv'] ?? '') . ', ' . $godina) : 'Stambena zajednica nije pronađena.';
+$subtitle = $z ? ('Stavka finansijskog plana — ' . ($z['naziv'] ?? '') . ', ' . $godina) : 'Stambena zajednica nije pronađena.';
 
 if ($z && $plan && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $naziv = trim(post_value('naziv'));
@@ -17,7 +17,7 @@ if ($z && $plan && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $period = post_value('period', 'mesecno');
     if (!in_array($period, ['mesecno','godisnje','jednokratno'], true)) { $period = 'mesecno'; }
     $osnov = post_value('osnov', 'fiksno');
-    if (!in_array($osnov, ['fiksno','poseban_deo','garazno_mesto','m2_posebni','m2_garaza','m2_ukupno'], true)) { $osnov = 'fiksno'; }
+    if (!in_array($osnov, ['fiksno','poseban_deo','garazno_mesto','m2_posebni','m2_garaza'], true)) { $osnov = 'fiksno'; }
     $iznos = (float)str_replace(',', '.', post_value('iznos', 0));
     $mesecOd = normalize_month(post_value('mesec_od', 1), 1);
     $mesecDo = normalize_month(post_value('mesec_do', 12), 12);
@@ -58,21 +58,21 @@ require __DIR__ . '/../includes/header.php';
     <div class="toolbar"><h2><?= $id ? 'Izmeni stavku' : 'Dodaj stavku' ?></h2><a class="btn btn-light" href="index.php?page=finansijski_plan&sz_id=<?= $szId ?>&godina=<?= $godina ?>">← Nazad</a></div>
     <form method="post" class="form-grid">
         <div class="field"><label>Tip</label><select name="tip"><option value="priliv" <?= $tip==='priliv'?'selected':'' ?>>Planirani priliv</option><option value="odliv" <?= $tip==='odliv'?'selected':'' ?>>Planirani odliv</option></select></div>
-        <div class="field"><label>Period</label><select name="period"><option value="mesecno" <?= $currentPeriod==='mesecno'?'selected':'' ?>>Mesečno</option><option value="jednokratno" <?= $currentPeriod==='jednokratno'?'selected':'' ?>>Jednokratno</option><option value="godisnje" <?= $currentPeriod==='godisnje'?'selected':'' ?>>Godišnje</option></select></div>
+        <div class="field"><label>Učestalost</label><select name="period"><option value="mesecno" <?= $currentPeriod==='mesecno'?'selected':'' ?>>Mesečno</option><option value="jednokratno" <?= $currentPeriod==='jednokratno'?'selected':'' ?>>Jednokratno</option><option value="godisnje" <?= $currentPeriod==='godisnje'?'selected':'' ?>>Godišnje</option></select></div>
         <div class="field"><label>Naziv stavke</label><input name="naziv" required value="<?= e($stavka['naziv'] ?? '') ?>" placeholder="npr. Održavanje lifta, zakup krova, prodaja otpada"></div>
         <div class="field"><label>Grupa</label><input name="grupa" value="<?= e($stavka['grupa'] ?? '') ?>" placeholder="npr. Dodatno zaduženje, zakup, oprema"></div>
-        <div class="field"><label>Osnov obračuna</label><select name="osnov">
-            <option value="fiksno" <?= $currentOsnov==='fiksno'?'selected':'' ?>>Fiksno</option>
-            <option value="poseban_deo" <?= $currentOsnov==='poseban_deo'?'selected':'' ?>>Po posebnom delu</option>
-            <option value="garazno_mesto" <?= $currentOsnov==='garazno_mesto'?'selected':'' ?>>Po garažnom mestu</option>
-            <option value="m2_posebni" <?= $currentOsnov==='m2_posebni'?'selected':'' ?>>Po m² posebnih delova</option>
-            <option value="m2_garaza" <?= $currentOsnov==='m2_garaza'?'selected':'' ?>>Po m² garaža</option>
-            <option value="m2_ukupno" <?= $currentOsnov==='m2_ukupno'?'selected':'' ?>>Po ukupnoj m²</option>
+        <div class="field"><label>Način obračuna</label><select name="osnov">
+            <option value="fiksno" <?= $currentOsnov==='fiksno'?'selected':'' ?>>🏢 Fiksno za celu zgradu</option>
+            <option value="poseban_deo" <?= $currentOsnov==='poseban_deo'?'selected':'' ?>>🏠 Po posebnom delu (stan/lokal)</option>
+            <option value="garazno_mesto" <?= $currentOsnov==='garazno_mesto'?'selected':'' ?>>🚗 Po garažnom mestu</option>
+            <option value="m2_posebni" <?= $currentOsnov==='m2_posebni'?'selected':'' ?>>📐 Po m² posebnih delova (stanovi/lokali)</option>
+            <option value="m2_garaza" <?= $currentOsnov==='m2_garaza'?'selected':'' ?>>🅿️ Po m² garažnog prostora</option>
         </select></div>
         <div class="field"><label>Iznos u dinarima</label><input type="number" step="0.01" name="iznos" value="<?= e($stavka['iznos'] ?? 0) ?>"></div>
         <div class="field"><label>Mesec početka / obračuna</label><select name="mesec_od"><?php for($m=1;$m<=12;$m++): ?><option value="<?= $m ?>" <?= $currentOd===$m?'selected':'' ?>><?= e(mesec_naziv($m)) ?></option><?php endfor; ?></select></div>
         <div class="field"><label>Mesec prestanka</label><select name="mesec_do"><?php for($m=1;$m<=12;$m++): ?><option value="<?= $m ?>" <?= $currentDo===$m?'selected':'' ?>><?= e(mesec_naziv($m)) ?></option><?php endfor; ?></select></div>
-        <div class="field full"><label>Trenutni godišnji efekat</label><input disabled value="<?= $stavka ? e(money_rs(stavka_total($stavka, $metrics))) : 'računa se posle čuvanja' ?>"></div>
+        <div class="field full"><label>Godišnji efekat stavke</label><input disabled value="<?= $stavka ? e(money_rs(stavka_total($stavka, $metrics))) : 'računa se posle čuvanja' ?>"></div>
+        <?php if ($stavka): ?><div class="notice full">Formula: <?= e(stavka_formula($stavka, $metrics)) ?> = <strong><?= e(money_rs(stavka_total($stavka, $metrics))) ?></strong>. Kontrolne osnovice: <?= e($metrics['brojDelova'] ?? 0) ?> posebnih delova, <?= e($metrics['brojGaraza'] ?? 0) ?> garažnih mesta, <?= e($metrics['povrsinaDelova'] ?? 0) ?> m² posebnih delova, <?= e($metrics['povrsinaGaraza'] ?? 0) ?> m² garaža.</div><?php endif; ?>
         <div class="field full"><label>Napomena</label><textarea name="napomena" rows="3"><?= e($stavka['napomena'] ?? '') ?></textarea></div>
         <div class="notice full">Za mesečnu stavku koristi se period od meseca početka do meseca prestanka. Za jednokratnu i godišnju stavku računa se samo mesec početka.</div>
         <div class="full actions"><button class="btn btn-primary" type="submit">💾 Sačuvaj</button><a class="btn btn-light" href="index.php?page=finansijski_plan&sz_id=<?= $szId ?>&godina=<?= $godina ?>">Odustani</a></div>

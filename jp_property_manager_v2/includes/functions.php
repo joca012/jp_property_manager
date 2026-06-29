@@ -80,6 +80,7 @@ function ensure_finansijski_plan_schema($conn) {
         upravljanje_po_delu DECIMAL(12,2) NOT NULL DEFAULT 0,
         garaza_po_mestu DECIMAL(12,2) NOT NULL DEFAULT 0,
         investiciono_po_m2 DECIMAL(12,2) NOT NULL DEFAULT 0,
+        investiciono_garaza_po_m2 DECIMAL(12,2) NOT NULL DEFAULT 0,
         stepen_naplate DECIMAL(5,2) NOT NULL DEFAULT 100,
         nepredvidjeni_proc DECIMAL(5,2) NOT NULL DEFAULT 0,
         napomena TEXT NULL,
@@ -135,6 +136,11 @@ function ensure_finansijski_plan_schema($conn) {
     if ($res && $res->num_rows === 0) {
         $conn->query("ALTER TABLE finansijski_plan_stavke ADD COLUMN izvor VARCHAR(60) NULL AFTER predefinisana");
     }
+
+    $res = $conn->query("SHOW COLUMNS FROM finansijski_planovi LIKE 'investiciono_garaza_po_m2'");
+    if ($res && $res->num_rows === 0) {
+        $conn->query("ALTER TABLE finansijski_planovi ADD COLUMN investiciono_garaza_po_m2 DECIMAL(12,2) NOT NULL DEFAULT 0 AFTER investiciono_po_m2");
+    }
 }
 
 function get_or_create_finansijski_plan($conn, $szId, $godina) {
@@ -180,13 +186,41 @@ function period_to_yearly($period, $iznos) {
     return $iznos;
 }
 
+function numeric_value($value) {
+    if ($value === null || $value === '') { return 0.0; }
+    if (is_string($value)) { $value = str_replace(',', '.', $value); }
+    return (float)$value;
+}
+
 function get_building_metric($z, $conn, $candidates, $default = 0) {
     foreach ($candidates as $candidate) {
         if (array_key_exists($candidate, $z)) {
-            return (float)$z[$candidate];
+            return numeric_value($z[$candidate]);
         }
     }
-    return $default;
+    return (float)$default;
+}
+
+function get_building_count_metric($z, $candidates, $default = 0) {
+    // Broj posebnih delova / garaža mora biti realan broj komada.
+    // Ako u starim podacima greškom u toj koloni stoji površina (npr. 1058 m²), ne sme se koristiti kao broj stanova.
+    foreach ($candidates as $candidate) {
+        if (array_key_exists($candidate, $z)) {
+            $v = numeric_value($z[$candidate]);
+            if ($v > 0 && $v <= 500) { return $v; }
+        }
+    }
+    return (float)$default;
+}
+
+function get_building_area_metric($z, $candidates, $default = 0) {
+    foreach ($candidates as $candidate) {
+        if (array_key_exists($candidate, $z)) {
+            $v = numeric_value($z[$candidate]);
+            if ($v > 0) { return $v; }
+        }
+    }
+    return (float)$default;
 }
 
 
@@ -213,9 +247,10 @@ function sync_finansijski_plan_from_v1_budzet($conn, $plan, $z, $godina) {
         $upravljanje = (float)($legacy['profesionalni_upravnik_po_posebnom_delu'] ?? 0);
         $garaza = (float)($legacy['garazno_mesto_mesecno'] ?? 0);
         $invest = (float)($legacy['investiciono_po_m2'] ?? 0);
+        $investGaraza = (float)($legacy['investiciono_garaza_po_m2'] ?? 0);
         $naplata = (float)($legacy['procenat_naplate'] ?? 100);
-        $stmt = $conn->prepare("UPDATE finansijski_planovi SET tekuce_po_delu=?, upravljanje_po_delu=?, garaza_po_mestu=?, investiciono_po_m2=?, stepen_naplate=? WHERE id=?");
-        $stmt->bind_param('dddddi', $tekuce, $upravljanje, $garaza, $invest, $naplata, $plan['id']);
+        $stmt = $conn->prepare("UPDATE finansijski_planovi SET tekuce_po_delu=?, upravljanje_po_delu=?, garaza_po_mestu=?, investiciono_po_m2=?, investiciono_garaza_po_m2=?, stepen_naplate=? WHERE id=?");
+        $stmt->bind_param('ddddddi', $tekuce, $upravljanje, $garaza, $invest, $investGaraza, $naplata, $plan['id']);
         $stmt->execute();
     }
 
@@ -244,17 +279,17 @@ function sync_finansijski_plan_from_v1_budzet($conn, $plan, $z, $godina) {
     if (table_exists($conn, 'budzet_stavke')) {
         $oldStavke = db_all($conn, "SELECT * FROM budzet_stavke WHERE budzet_id=? AND aktivna=1", 'i', [(int)$legacy['id']]);
         foreach ($oldStavke as $s) {
-            $osnovica = 1;
             $obracun = $s['obracun'] ?? 'fiksno';
-            if ($obracun === 'po_posebnom_delu') { $osnovica = (float)($z['broj_posebnih_delova'] ?? 0); }
-            if ($obracun === 'po_m2') { $osnovica = (float)($z['povrsina_posebnih_delova'] ?? ($z['ukupna_povrsina_posebnih_delova'] ?? 0)); }
-            if ($obracun === 'po_garaznom_mestu') { $osnovica = (float)($z['broj_garaznih_mesta'] ?? 0); }
-            $mnozilac = (($s['ucestalost'] ?? '') === 'mesecno') ? 12 : 1;
-            $godisnje = (float)($s['iznos'] ?? 0) * $osnovica * $mnozilac;
+            $osnov = 'fiksno';
+            if ($obracun === 'po_posebnom_delu') { $osnov = 'poseban_deo'; }
+            if ($obracun === 'po_garaznom_mestu') { $osnov = 'garazno_mesto'; }
+            if ($obracun === 'po_m2') { $osnov = 'm2_posebni'; }
+            $period = (($s['ucestalost'] ?? '') === 'mesecno') ? 'mesecno' : 'godisnje';
             $tip = (($s['vrsta'] ?? '') === 'priliv') ? 'priliv' : 'odliv';
             $naziv = trim($s['naziv'] ?? 'Stavka iz starog budžeta');
-            if ($naziv !== '' && $godisnje != 0) {
-                upsert_plan_stavka_by_name($conn, $planId, $tip, $naziv, 'Preneto iz v1 budžeta', 'godisnje', $godisnje, 0);
+            $iznos = (float)($s['iznos'] ?? 0);
+            if ($naziv !== '' && $iznos != 0) {
+                upsert_plan_stavka_by_name($conn, $planId, $tip, $naziv, 'Preneto iz v1 budžeta', $period, $iznos, 0, $osnov, 1, ($period === 'mesecno' ? 12 : 1));
             }
         }
     }
@@ -262,15 +297,16 @@ function sync_finansijski_plan_from_v1_budzet($conn, $plan, $z, $godina) {
     return db_one($conn, "SELECT * FROM finansijski_planovi WHERE id=?", 'i', [$planId]);
 }
 
-function upsert_plan_stavka_by_name($conn, $planId, $tip, $naziv, $grupa, $period, $iznos, $predefinisana = 0) {
+function upsert_plan_stavka_by_name($conn, $planId, $tip, $naziv, $grupa, $period, $iznos, $predefinisana = 0, $osnov = 'fiksno', $mesecOd = 1, $mesecDo = 12) {
     $existing = db_one($conn, "SELECT id FROM finansijski_plan_stavke WHERE plan_id=? AND tip=? AND naziv=? LIMIT 1", 'iss', [$planId, $tip, $naziv]);
+    if ($period === 'godisnje' || $period === 'jednokratno') { $mesecDo = $mesecOd; }
     if ($existing) {
-        $stmt = $conn->prepare("UPDATE finansijski_plan_stavke SET grupa=?, period=?, iznos=?, predefinisana=?, aktivna=1 WHERE id=?");
-        $stmt->bind_param('ssdii', $grupa, $period, $iznos, $predefinisana, $existing['id']);
+        $stmt = $conn->prepare("UPDATE finansijski_plan_stavke SET grupa=?, period=?, osnov=?, iznos=?, mesec_od=?, mesec_do=?, predefinisana=?, aktivna=1 WHERE id=?");
+        $stmt->bind_param('sssdiiii', $grupa, $period, $osnov, $iznos, $mesecOd, $mesecDo, $predefinisana, $existing['id']);
         $stmt->execute();
     } else {
-        $stmt = $conn->prepare("INSERT INTO finansijski_plan_stavke (plan_id, tip, naziv, grupa, period, iznos, predefinisana, aktivna) VALUES (?, ?, ?, ?, ?, ?, ?, 1)");
-        $stmt->bind_param('issssdi', $planId, $tip, $naziv, $grupa, $period, $iznos, $predefinisana);
+        $stmt = $conn->prepare("INSERT INTO finansijski_plan_stavke (plan_id, tip, naziv, grupa, period, osnov, iznos, mesec_od, mesec_do, predefinisana, aktivna) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)");
+        $stmt->bind_param('isssssdiii', $planId, $tip, $naziv, $grupa, $period, $osnov, $iznos, $mesecOd, $mesecDo, $predefinisana);
         $stmt->execute();
     }
 }
@@ -374,7 +410,8 @@ function base_priliv_rows($plan, $metrics) {
         ['naziv'=>'Tekuće održavanje','osnov'=>'poseban_deo','osnovica'=>$metrics['brojDelova'] ?? 0,'iznos'=>$p('tekuce_po_delu'),'meseci'=>12,'total'=>($metrics['brojDelova'] ?? 0)*$p('tekuce_po_delu')*12],
         ['naziv'=>'Upravljanje','osnov'=>'poseban_deo','osnovica'=>$metrics['brojDelova'] ?? 0,'iznos'=>$p('upravljanje_po_delu'),'meseci'=>12,'total'=>($metrics['brojDelova'] ?? 0)*$p('upravljanje_po_delu')*12],
         ['naziv'=>'Tekuće održavanje garaža','osnov'=>'garazno_mesto','osnovica'=>$metrics['brojGaraza'] ?? 0,'iznos'=>$p('garaza_po_mestu'),'meseci'=>12,'total'=>($metrics['brojGaraza'] ?? 0)*$p('garaza_po_mestu')*12],
-        ['naziv'=>'Investiciono održavanje','osnov'=>'m2_ukupno','osnovica'=>$metrics['ukupnaPovrsina'] ?? 0,'iznos'=>$p('investiciono_po_m2'),'meseci'=>12,'total'=>($metrics['ukupnaPovrsina'] ?? 0)*$p('investiciono_po_m2')*12],
+        ['naziv'=>'Investiciono održavanje posebnih delova','osnov'=>'m2_posebni','osnovica'=>$metrics['povrsinaDelova'] ?? 0,'iznos'=>$p('investiciono_po_m2'),'meseci'=>12,'total'=>($metrics['povrsinaDelova'] ?? 0)*$p('investiciono_po_m2')*12],
+        ['naziv'=>'Investiciono održavanje garažnog prostora','osnov'=>'m2_garaza','osnovica'=>$metrics['povrsinaGaraza'] ?? 0,'iznos'=>$p('investiciono_garaza_po_m2'),'meseci'=>12,'total'=>($metrics['povrsinaGaraza'] ?? 0)*$p('investiciono_garaza_po_m2')*12],
     ];
 }
 
@@ -392,10 +429,10 @@ function finansijski_plan_summary($conn, $szId, $godina) {
     $plan = sync_finansijski_plan_from_v1_budzet($conn, $plan, $z, (int)$godina);
 
     $stavke = db_all($conn, "SELECT * FROM finansijski_plan_stavke WHERE plan_id=? AND aktivna=1 ORDER BY tip, predefinisana DESC, grupa, naziv", 'i', [(int)$plan['id']]);
-    $brojDelova = get_building_metric($z, $conn, ['broj_posebnih_delova','broj_delova','broj_stanova'], 0);
-    $brojGaraza = get_building_metric($z, $conn, ['broj_garaznih_mesta','broj_garaza'], 0);
-    $povrsinaDelova = get_building_metric($z, $conn, ['ukupna_povrsina_posebnih_delova','povrsina_posebnih_delova','ukupna_povrsina'], 0);
-    $povrsinaGaraza = get_building_metric($z, $conn, ['ukupna_povrsina_garaznih_mesta','povrsina_garaznih_mesta'], 0);
+    $brojDelova = get_building_count_metric($z, ['broj_posebnih_delova','broj_delova','broj_stanova_lokala','broj_stanova_i_lokala','broj_stanova'], 0);
+    $brojGaraza = get_building_count_metric($z, ['broj_garaznih_mesta','broj_garaza','garazna_mesta'], 0);
+    $povrsinaDelova = get_building_area_metric($z, ['ukupna_povrsina_posebnih_delova','povrsina_posebnih_delova','povrsina_stanova_lokala','ukupna_povrsina_stanova_lokala'], 0);
+    $povrsinaGaraza = get_building_area_metric($z, ['ukupna_povrsina_garaznih_mesta','povrsina_garaznih_mesta','povrsina_garaza'], 0);
     $ukupnaPovrsina = $povrsinaDelova + $povrsinaGaraza;
     $metrics = compact('brojDelova','brojGaraza','povrsinaDelova','povrsinaGaraza','ukupnaPovrsina');
 
