@@ -25,5 +25,8 @@ require __DIR__ . '/../includes/header.php';
     <a class="card module-card" href="index.php?page=dokumentacija&sz_id=<?= $szId ?>"><div><h3>Dokumentacija</h3><p class="muted">PDF, fotografije, zapisnici, službene beleške.</p></div><div class="icon">📁</div></a>
     <a class="card module-card" href="index.php?page=izvestaji&sz_id=<?= $szId ?>"><div><h3>Izveštaji</h3><p class="muted">Realizacija programa i utrošak sredstava.</p></div><div class="icon">📈</div></a>
 </section>
+<br>
+<a class="btn btn-primary" href="index.php?page=elementi_zgrade_pregled&sz_id=<?= $szId ?>">Pregled elemenata zgrade</a>
+<a class="btn btn-light" href="index.php?page=elementi_zgrade&sz_id=<?= $szId ?>">Uredi popis elemenata</a>
 <?php endif; ?>
 <?php require __DIR__ . '/../includes/footer.php'; ?>

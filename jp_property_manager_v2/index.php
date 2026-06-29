@@ -3,7 +3,7 @@ require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/includes/functions.php';
 
 $allowed = [
-    'dashboard', 'zajednice', 'zajednica', 'dodaj_zajednicu', 'finansijski_plan', 'finansijski_plan_stavka', 'finansijski_plan_obrisi', 'finansijski_plan_rebalans', 'budzet', 'oprema', 'program',
+    'dashboard', 'zajednice', 'zajednica', 'dodaj_zajednicu', 'finansijski_plan', 'finansijski_plan_stavka', 'finansijski_plan_obrisi', 'finansijski_plan_rebalans', 'budzet', 'oprema', 'program', 'elementi_zgrade_pregled', 'elementi_zgrade',
     'kvarovi', 'dokumentacija', 'izvestaji', 'ponude', 'izvodjaci'
 ];
 $page = $_GET['page'] ?? 'dashboard';
