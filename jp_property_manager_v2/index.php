@@ -20,7 +20,12 @@ $allowed = [
     'dokumentacija',
     'izvestaji',
     'ponude',
-    'izvodjaci'
+    'izvodjaci',
+    'cenovnici',
+    'cenovnik',
+    'cenovnik_stavke',
+    'ponuda',
+    'ponuda_stavke'
 ];
 
 $page = $_GET['page'] ?? 'dashboard';
