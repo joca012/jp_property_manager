@@ -1,0 +1,29 @@
+# Lokalna konfiguracija
+config.php
+includes/config.php
+
+# Logovi
+*.log
+error_log
+
+# Privremeni i backup fajlovi
+*.tmp
+*.bak
+*~
+*-stari.php
+*_stari.php
+
+# Arhive
+*.zip
+*.rar
+*.7z
+
+# SQL dump baze
+*.sql
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+tmp/
